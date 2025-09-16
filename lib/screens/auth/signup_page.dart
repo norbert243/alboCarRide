@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/driver_home_page.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/twilio/twilio_service.dart';
 
 class SignupPage extends StatefulWidget {
   final String role;
@@ -15,24 +17,22 @@ class SignupPage extends StatefulWidget {
 
 class _SignupPageState extends State<SignupPage> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  final _otpController = TextEditingController();
   final _fullNameController = TextEditingController();
 
   bool _isLoading = false;
-  bool _isLogin = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
     _phoneController.dispose();
-    _confirmPasswordController.dispose();
+    _otpController.dispose();
     _fullNameController.dispose();
     super.dispose();
   }
+
+  bool _otpSent = false;
+  String? _generatedOtp;
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -40,89 +40,40 @@ class _SignupPageState extends State<SignupPage> {
     setState(() => _isLoading = true);
 
     try {
-      if (_isLogin) {
-        // Login logic
-        print('Attempting login with email: ${_emailController.text}');
-        final authResponse = await Supabase.instance.client.auth
-            .signInWithPassword(
-              email: _emailController.text,
-              password: _passwordController.text,
-            );
+      if (!_otpSent) {
+        // Send OTP for verification
+        final phoneNumber = _phoneController.text;
+        _generatedOtp = TwilioService.generateOTP();
 
-        print('Login successful for user: ${authResponse.user?.id}');
-
-        // Get user role from profiles table after login
-        if (authResponse.user != null) {
-          try {
-            final profileResponse = await Supabase.instance.client
-                .from('profiles')
-                .select('role')
-                .eq('id', authResponse.user!.id)
-                .single();
-
-            final role = profileResponse['role'] as String;
-            print('User role retrieved: $role');
-
-            if (mounted) {
-              _navigateBasedOnRole(role);
-            }
-          } catch (e) {
-            print('Error fetching profile: $e');
-            CustomToast.showError(
-              context: context,
-              message: 'No profile found. Please sign up first.',
-            );
-          }
-        }
-      } else {
-        // Signup logic
-        print('Attempting signup with email: ${_emailController.text}');
-        final authResponse = await Supabase.instance.client.auth.signUp(
-          email: _emailController.text,
-          password: _passwordController.text,
+        final otpSent = await TwilioService.sendOTP(
+          phoneNumber: phoneNumber,
+          otp: _generatedOtp!,
         );
 
-        print('Signup successful for user: ${authResponse.user?.id}');
-
-        if (authResponse.user != null) {
-          try {
-            // Save user profile to profiles table (matches your schema)
-            // Use a raw SQL query to bypass RLS if needed, or use service role
-            final response = await Supabase.instance.client
-                .from('profiles')
-                .insert({
-                  'id': authResponse.user!.id,
-                  'full_name': _fullNameController.text,
-                  'phone': _phoneController.text,
-                  'role': widget.role,
-                });
-
-            print('Profile created successfully for role: ${widget.role}');
-
-            if (mounted) {
-              _navigateBasedOnRole(widget.role);
-            }
-          } catch (e) {
-            print('Error creating profile: $e');
-            CustomToast.showError(
-              context: context,
-              message: 'Error creating profile. Please check RLS policies.',
-            );
-
-            // If profile creation fails, we should still navigate to role selection
-            // so user can try again or the admin can fix the profile manually
-            if (mounted) {
-              Navigator.pushReplacementNamed(context, '/role-selection');
-            }
-          }
+        if (otpSent) {
+          setState(() => _otpSent = true);
+          CustomToast.showSuccess(
+            context: context,
+            message: 'OTP sent to your phone number',
+          );
+        } else {
+          CustomToast.showError(
+            context: context,
+            message: 'Failed to send OTP. Please try again.',
+          );
+        }
+      } else {
+        // Verify OTP and complete registration
+        final enteredOtp = _otpController.text;
+        if (enteredOtp == _generatedOtp) {
+          await _completeRegistration();
+        } else {
+          CustomToast.showError(
+            context: context,
+            message: 'Invalid OTP. Please try again.',
+          );
         }
       }
-    } on AuthException catch (error) {
-      print('AuthException: ${error.message}');
-      CustomToast.showError(
-        context: context,
-        message: 'Authentication error: ${error.message}',
-      );
     } catch (error) {
       print('Unexpected error: $error');
       CustomToast.showError(
@@ -133,6 +84,60 @@ class _SignupPageState extends State<SignupPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _completeRegistration() async {
+    try {
+      // Generate a unique user ID and email for Supabase (since we need email for auth)
+      final phoneNumber = _phoneController.text;
+      final userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
+      final dummyEmail = '$userId@albocarride.com';
+      final dummyPassword =
+          'Alb0CarRide${DateTime.now().millisecondsSinceEpoch}';
+
+      // Create user in Supabase with dummy credentials
+      final authResponse = await Supabase.instance.client.auth.signUp(
+        email: dummyEmail,
+        password: dummyPassword,
+      );
+
+      if (authResponse.user != null) {
+        // Save user profile to profiles table
+        await Supabase.instance.client.from('profiles').insert({
+          'id': authResponse.user!.id,
+          'full_name': _fullNameController.text,
+          'phone': phoneNumber,
+          'role': widget.role,
+        });
+
+        print('Profile created successfully for role: ${widget.role}');
+
+        // Save session to persistent storage
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session != null) {
+          final expiry = session.expiresAt != null
+              ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
+              : DateTime.now().add(const Duration(days: 30));
+
+          await SessionService.saveSession(
+            userId: authResponse.user!.id,
+            userPhone: phoneNumber,
+            userRole: widget.role,
+            expiry: expiry,
+          );
+        }
+
+        if (mounted) {
+          _navigateBasedOnRole(widget.role);
+        }
+      }
+    } catch (e) {
+      print('Error creating profile: $e');
+      CustomToast.showError(
+        context: context,
+        message: 'Error creating profile. Please try again.',
+      );
     }
   }
 
@@ -159,7 +164,7 @@ class _SignupPageState extends State<SignupPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: Text(
-          '${_isLogin ? 'Login' : 'Sign Up'} as ${widget.role.capitalize()}',
+          'Sign Up as ${widget.role.capitalize()}',
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.black87,
@@ -179,7 +184,7 @@ class _SignupPageState extends State<SignupPage> {
               // Header
               const SizedBox(height: 20),
               Text(
-                _isLogin ? 'Welcome Back!' : 'Create Account',
+                'Create Account',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -189,9 +194,7 @@ class _SignupPageState extends State<SignupPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _isLogin
-                    ? 'Sign in to continue your journey'
-                    : 'Join AlboCarRide as a ${widget.role}',
+                'Join AlboCarRide as a ${widget.role}',
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey[600],
@@ -203,76 +206,47 @@ class _SignupPageState extends State<SignupPage> {
 
               // Form Fields
               _buildTextField(
-                controller: _emailController,
-                label: 'Email Address',
-                icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
+                controller: _phoneController,
+                label: 'Phone Number',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
+                    return 'Please enter your phone number';
                   }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
+                  if (value.length < 10) {
+                    return 'Please enter a valid phone number';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 20),
-
-              if (!_isLogin) ...[
-                _buildTextField(
-                  controller: _fullNameController,
-                  label: 'Full Name',
-                  icon: Icons.person_outline,
-                  validator: (value) {
-                    if (!_isLogin && (value == null || value.isEmpty)) {
-                      return 'Please enter your full name';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Phone Number',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    if (!_isLogin && (value == null || value.isEmpty)) {
-                      return 'Please enter your phone number';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
 
               _buildTextField(
-                controller: _passwordController,
-                label: 'Password',
-                icon: Icons.lock_outline,
-                obscureText: true,
+                controller: _fullNameController,
+                label: 'Full Name',
+                icon: Icons.person_outline,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Please enter your password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
+                    return 'Please enter your full name';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 20),
 
-              if (!_isLogin) ...[
+              if (_otpSent) ...[
                 _buildTextField(
-                  controller: _confirmPasswordController,
-                  label: 'Confirm Password',
-                  icon: Icons.lock_outline,
-                  obscureText: true,
+                  controller: _otpController,
+                  label: 'Verification Code',
+                  icon: Icons.sms_outlined,
+                  keyboardType: TextInputType.number,
                   validator: (value) {
-                    if (!_isLogin && value != _passwordController.text) {
-                      return 'Passwords do not match';
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter the verification code';
+                    }
+                    if (value.length != 6) {
+                      return 'Verification code must be 6 digits';
                     }
                     return null;
                   },
@@ -280,18 +254,23 @@ class _SignupPageState extends State<SignupPage> {
                 const SizedBox(height: 20),
               ],
 
-              const SizedBox(height: 8),
-              Text(
-                _isLogin
-                    ? 'Forgot password?'
-                    : 'Password must be at least 6 characters',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _isLogin ? Colors.deepPurple : Colors.grey[600],
+              if (!_otpSent) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'We\'ll send a verification code to your phone',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.end,
-              ),
-              const SizedBox(height: 32),
+                const SizedBox(height: 32),
+              ] else ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Enter the 6-digit code sent to your phone',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+              ],
 
               // Submit Button
               ElevatedButton(
@@ -315,7 +294,9 @@ class _SignupPageState extends State<SignupPage> {
                         ),
                       )
                     : Text(
-                        _isLogin ? 'Sign In' : 'Create Account',
+                        _otpSent
+                            ? 'Verify & Continue'
+                            : 'Send Verification Code',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -324,22 +305,23 @@ class _SignupPageState extends State<SignupPage> {
               ),
               const SizedBox(height: 24),
 
-              // Toggle between login/signup
-              TextButton(
-                onPressed: _isLoading
-                    ? null
-                    : () => setState(() => _isLogin = !_isLogin),
-                style: TextButton.styleFrom(foregroundColor: Colors.deepPurple),
-                child: Text(
-                  _isLogin
-                      ? 'Don\'t have an account? Sign up'
-                      : 'Already have an account? Sign in',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+              if (_otpSent) ...[
+                TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => setState(() {
+                          _otpSent = false;
+                          _otpController.clear();
+                        }),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.deepPurple,
+                  ),
+                  child: const Text(
+                    'Change phone number',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

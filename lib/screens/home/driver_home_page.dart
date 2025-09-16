@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:albocarride/services/session_service.dart';
 
 class DriverHomePage extends StatelessWidget {
   const DriverHomePage({super.key});
 
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
+    await SessionService.clearSession();
   }
 
   @override

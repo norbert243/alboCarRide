@@ -3,20 +3,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SessionService {
   static const String _isLoggedInKey = 'is_logged_in';
   static const String _userIdKey = 'user_id';
-  static const String _userEmailKey = 'user_email';
+  static const String _userPhoneKey = 'user_phone';
   static const String _userRoleKey = 'user_role';
   static const String _sessionExpiryKey = 'session_expiry';
 
   static Future<void> saveSession({
     required String userId,
-    required String userEmail,
+    required String userPhone,
     required String userRole,
     required DateTime expiry,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_isLoggedInKey, true);
     await prefs.setString(_userIdKey, userId);
-    await prefs.setString(_userEmailKey, userEmail);
+    await prefs.setString(_userPhoneKey, userPhone);
     await prefs.setString(_userRoleKey, userRole);
     await prefs.setString(_sessionExpiryKey, expiry.toIso8601String());
   }
@@ -25,7 +25,7 @@ class SessionService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_isLoggedInKey);
     await prefs.remove(_userIdKey);
-    await prefs.remove(_userEmailKey);
+    await prefs.remove(_userPhoneKey);
     await prefs.remove(_userRoleKey);
     await prefs.remove(_sessionExpiryKey);
   }
@@ -67,7 +67,7 @@ class SessionService {
 
     return {
       'userId': prefs.getString(_userIdKey),
-      'userEmail': prefs.getString(_userEmailKey),
+      'userPhone': prefs.getString(_userPhoneKey),
       'userRole': prefs.getString(_userRoleKey),
       'expiry': expiryString != null ? DateTime.parse(expiryString) : null,
     };
@@ -78,9 +78,9 @@ class SessionService {
     return prefs.getString(_userIdKey);
   }
 
-  static Future<String?> getUserEmail() async {
+  static Future<String?> getUserPhone() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userEmailKey);
+    return prefs.getString(_userPhoneKey);
   }
 
   static Future<String?> getUserRole() async {

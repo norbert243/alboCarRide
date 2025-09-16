@@ -44,6 +44,9 @@ dependencies:
   # Persistent storage for session management
   shared_preferences: ^2.4.1
 
+  # HTTP client for API calls
+  http: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
