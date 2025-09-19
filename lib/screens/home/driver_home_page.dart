@@ -1,13 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/ride_negotiation_service.dart';
+import 'package:provider/provider.dart';
 
-class DriverHomePage extends StatelessWidget {
+class DriverHomePage extends StatefulWidget {
   const DriverHomePage({super.key});
+
+  @override
+  State<DriverHomePage> createState() => _DriverHomePageState();
+}
+
+class _DriverHomePageState extends State<DriverHomePage> {
+  bool _isOnline = false;
+  bool _isLoading = false;
 
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
     await SessionService.clearSession();
+  }
+
+  Future<void> _toggleOnlineStatus() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .update({'is_online': !_isOnline})
+            .eq('id', user.id)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception('Failed to update online status');
+        }
+
+        setState(() {
+          _isOnline = !_isOnline;
+        });
+
+        if (_isOnline) {
+          // Start listening for ride offers when going online
+          // Real-time subscription is handled by the OfferBoard widget
+        }
+      }
+    } catch (e) {
+      print('Error toggling online status: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOnlineStatus();
+  }
+
+  Future<void> _loadOnlineStatus() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .select('is_online')
+            .eq('id', user.id)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _isOnline = response['is_online'] ?? false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading online status: $e');
+    }
   }
 
   @override
@@ -15,23 +92,58 @@ class DriverHomePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text(
-          'Driver Dashboard',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+        title: Text(
+          _isOnline ? 'Online - Ready to Drive' : 'Driver Dashboard',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: _isOnline ? Colors.white : Colors.black87,
+          ),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: _isOnline ? Colors.green : Colors.white,
         elevation: 1,
-        foregroundColor: Colors.black87,
+        foregroundColor: _isOnline ? Colors.white : Colors.black87,
         actions: [
+          if (_isOnline)
+            Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Online',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await _signOut();
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/role-selection',
-                (route) => false,
-              );
+              if (mounted) {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  '/role-selection',
+                  (route) => false,
+                );
+              }
             },
           ),
         ],
@@ -46,12 +158,14 @@ class DriverHomePage extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.green,
+                color: _isOnline ? Colors.green : Colors.blue,
                 borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Colors.green, Colors.lightGreen],
+                  colors: _isOnline
+                      ? [Colors.green, Colors.lightGreen]
+                      : [Colors.blue, Colors.lightBlue],
                 ),
               ),
               child: Column(
@@ -67,7 +181,9 @@ class DriverHomePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Ready to start earning?',
+                    _isOnline
+                        ? 'You\'re online and ready to accept rides!'
+                        : 'Ready to start earning?',
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.white.withOpacity(0.9),
@@ -128,10 +244,10 @@ class DriverHomePage extends StatelessWidget {
               ),
               children: [
                 _buildActionCard(
-                  icon: Icons.directions_car,
-                  title: 'Go Online',
-                  color: Colors.blue,
-                  onTap: () {},
+                  icon: _isOnline ? Icons.offline_bolt : Icons.directions_car,
+                  title: _isOnline ? 'Go Offline' : 'Go Online',
+                  color: _isOnline ? Colors.red : Colors.blue,
+                  onTap: _isLoading ? null : () => _toggleOnlineStatus(),
                 ),
                 _buildActionCard(
                   icon: Icons.schedule,
@@ -212,7 +328,7 @@ class DriverHomePage extends StatelessWidget {
     required IconData icon,
     required String title,
     required Color color,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return Material(
       borderRadius: BorderRadius.circular(12),
