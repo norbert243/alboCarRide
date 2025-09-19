@@ -89,32 +89,110 @@ class _SignupPageState extends State<SignupPage> {
 
   Future<void> _completeRegistration() async {
     try {
-      // Generate a unique user ID and email for Supabase (since we need email for auth)
       final phoneNumber = _phoneController.text;
-      final userId = 'user_${DateTime.now().millisecondsSinceEpoch}';
-      final dummyEmail = '$userId@albocarride.com';
-      final dummyPassword =
-          'Alb0CarRide${DateTime.now().millisecondsSinceEpoch}';
+      final fullName = _fullNameController.text;
 
-      // Create user in Supabase with dummy credentials
+      // Create a proper email based on phone number for authentication
+      final email = '$phoneNumber@albocarride.com';
+      final password = 'Alb0CarRide${DateTime.now().millisecondsSinceEpoch}';
+
+      print('Creating user with email: $email');
+      print('User role: ${widget.role}');
+
+      // Create user in Supabase with proper credentials
       final authResponse = await Supabase.instance.client.auth.signUp(
-        email: dummyEmail,
-        password: dummyPassword,
+        email: email,
+        password: password,
+        data: {
+          'phone': phoneNumber,
+          'full_name': fullName,
+          'role': widget.role,
+        },
+      );
+
+      print(
+        'Auth response: ${authResponse.user != null ? "Success" : "Failed"}',
       );
 
       if (authResponse.user != null) {
-        // Save user profile to profiles table
-        await Supabase.instance.client.from('profiles').insert({
-          'id': authResponse.user!.id,
-          'full_name': _fullNameController.text,
-          'phone': phoneNumber,
-          'role': widget.role,
-        });
+        print('User created with ID: ${authResponse.user!.id}');
 
-        print('Profile created successfully for role: ${widget.role}');
+        // Save user profile to profiles table
+        try {
+          final profileResponse =
+              await Supabase.instance.client.from('profiles').insert({
+                'id': authResponse.user!.id,
+                'full_name': fullName,
+                'phone': phoneNumber,
+                'role': widget.role,
+              }).select();
+
+          print('Profile created successfully: $profileResponse');
+
+          // Create driver-specific record if role is driver
+          if (widget.role == 'driver') {
+            try {
+              final driverResponse =
+                  await Supabase.instance.client.from('drivers').insert({
+                    'id': authResponse.user!.id,
+                    'is_approved': false,
+                    'is_online': false,
+                    'rating': 0.0,
+                    'total_rides': 0,
+                  }).select();
+
+              print('Driver record created successfully: $driverResponse');
+            } catch (driverError) {
+              print('Error creating driver record: $driverError');
+              if (mounted) {
+                CustomToast.showInfo(
+                  context: context,
+                  message:
+                      'Profile created but driver setup incomplete. Please complete your driver profile later.',
+                );
+              }
+            }
+          }
+
+          // Create customer-specific record if role is customer
+          if (widget.role == 'customer') {
+            try {
+              final customerResponse =
+                  await Supabase.instance.client.from('customers').insert({
+                    'id': authResponse.user!.id,
+                    'preferred_payment_method': 'cash',
+                    'rating': 0.0,
+                    'total_rides': 0,
+                  }).select();
+
+              print('Customer record created successfully: $customerResponse');
+            } catch (customerError) {
+              print('Error creating customer record: $customerError');
+              if (mounted) {
+                CustomToast.showInfo(
+                  context: context,
+                  message:
+                      'Profile created but customer setup incomplete. Please complete your customer profile later.',
+                );
+              }
+            }
+          }
+        } catch (profileError) {
+          print('Error creating profile: $profileError');
+          // Show warning but continue - user can complete profile later
+          if (mounted) {
+            CustomToast.showInfo(
+              context: context,
+              message:
+                  'User created but profile setup incomplete. Please complete your profile later.',
+            );
+          }
+        }
 
         // Save session to persistent storage
         final session = Supabase.instance.client.auth.currentSession;
+        print('Current session: ${session != null ? "Exists" : "Null"}');
+
         if (session != null) {
           final expiry = session.expiresAt != null
               ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
@@ -126,17 +204,25 @@ class _SignupPageState extends State<SignupPage> {
             userRole: widget.role,
             expiry: expiry,
           );
+          print('Session saved to local storage');
         }
 
         if (mounted) {
+          print('Navigating to ${widget.role} homepage');
           _navigateBasedOnRole(widget.role);
         }
+      } else {
+        print('User creation failed - authResponse.user is null');
+        CustomToast.showError(
+          context: context,
+          message: 'Registration failed. Please try again.',
+        );
       }
     } catch (e) {
-      print('Error creating profile: $e');
+      print('Error in completeRegistration: $e');
       CustomToast.showError(
         context: context,
-        message: 'Error creating profile. Please try again.',
+        message: 'Error creating profile: ${e.toString()}',
       );
     }
   }

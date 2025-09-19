@@ -86,26 +86,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       final profileResponse = await _supabase
           .from('profiles')
-          .select('role')
+          .select('role, phone')
           .eq('id', session.user.id)
           .single();
 
       final role = profileResponse['role'] as String;
-      print('User role: $role');
+      final phoneNumber = profileResponse['phone'] as String? ?? '';
+      print('User role: $role, phone: $phoneNumber');
 
       // Save session data
       final expiry = session.expiresAt != null
           ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
           : DateTime.now().add(const Duration(days: 30));
-
-      // For phone-based authentication, we need to get the phone from the profile
-      final profileData = await _supabase
-          .from('profiles')
-          .select('phone')
-          .eq('id', session.user.id)
-          .single();
-
-      final phoneNumber = profileData['phone'] as String? ?? '';
 
       await SessionService.saveSession(
         userId: session.user.id,

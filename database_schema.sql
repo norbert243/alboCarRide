@@ -1,19 +1,11 @@
 -- AlboCarRide Database Schema
 -- This schema includes all tables needed for the ride-sharing application
 
--- Users table (extends Supabase auth.users)
-CREATE TABLE users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Profiles table (user profiles with role information)
+-- Profiles table (user profiles with role information - references auth.users directly)
 CREATE TABLE profiles (
-    id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name VARCHAR(255) NOT NULL,
-    phone VARCHAR(20),
+    phone VARCHAR(20) UNIQUE,
     role VARCHAR(20) NOT NULL CHECK (role IN ('customer', 'driver')),
     avatar_url TEXT,
     is_verified BOOLEAN DEFAULT FALSE,
@@ -201,18 +193,14 @@ CREATE TRIGGER update_driver_earnings_updated_at BEFORE UPDATE ON driver_earning
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert sample data (optional)
-INSERT INTO users (id, email) VALUES 
-('00000000-0000-0000-0000-000000000001', 'admin@albocarride.com'),
-('00000000-0000-0000-0000-000000000002', 'driver1@albocarride.com'),
-('00000000-0000-0000-0000-000000000003', 'customer1@albocarride.com');
+-- Note: These sample profiles would require corresponding auth.users entries
+-- INSERT INTO profiles (id, full_name, phone, role) VALUES
+-- ('00000000-0000-0000-0000-000000000001', 'System Admin', '+1234567890', 'customer'),
+-- ('00000000-0000-0000-0000-000000000002', 'John Driver', '+1234567891', 'driver'),
+-- ('00000000-0000-0000-0000-000000000003', 'Sarah Customer', '+1234567892', 'customer');
 
-INSERT INTO profiles (id, full_name, phone, role) VALUES 
-('00000000-0000-0000-0000-000000000001', 'System Admin', '+1234567890', 'customer'),
-('00000000-0000-0000-0000-000000000002', 'John Driver', '+1234567891', 'driver'),
-('00000000-0000-0000-0000-000000000003', 'Sarah Customer', '+1234567892', 'customer');
+-- INSERT INTO drivers (id, license_number, vehicle_make, vehicle_model, license_plate, is_approved, is_online) VALUES
+-- ('00000000-0000-0000-0000-000000000002', 'DRV123456', 'Toyota', 'Corolla', 'ABC123', TRUE, TRUE);
 
-INSERT INTO drivers (id, license_number, vehicle_make, vehicle_model, license_plate, is_approved, is_online) VALUES 
-('00000000-0000-0000-0000-000000000002', 'DRV123456', 'Toyota', 'Corolla', 'ABC123', TRUE, TRUE);
-
-INSERT INTO customers (id, preferred_payment_method) VALUES 
-('00000000-0000-0000-0000-000000000003', 'card');
+-- INSERT INTO customers (id, preferred_payment_method) VALUES
+-- ('00000000-0000-0000-0000-000000000003', 'card');
