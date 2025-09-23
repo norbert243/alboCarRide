@@ -8,6 +8,10 @@ class WaitingForReviewPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Verification Pending',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
@@ -141,12 +145,8 @@ class WaitingForReviewPage extends StatelessWidget {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    // Navigate back to home or check status
-                    Navigator.pushNamedAndRemoveUntil(
-                      context,
-                      '/auth_wrapper',
-                      (route) => false,
-                    );
+                    // Navigate back to auth wrapper
+                    Navigator.pushNamed(context, '/auth_wrapper');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,

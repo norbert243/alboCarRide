@@ -1,4 +1,6 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class TwilioService {
   static final String _accountSid = dotenv.get('TWILIO_ACCOUNT_SID');
@@ -9,30 +11,23 @@ class TwilioService {
     required String to,
     required String message,
   }) async {
-    try {
-      // Mock implementation for testing without verified numbers
-      print('\n📱 === MOCK SMS SENT (Twilio Trial Mode) ===');
-      print('📞 To: $to');
-      print('💬 Message: $message');
-      print('📱 ==========================================\n');
-
-      // Extract OTP from message for easy testing
-      final otpMatch = RegExp(r'\b\d{6}\b').firstMatch(message);
-      if (otpMatch != null) {
-        print('🎯 VERIFICATION CODE: ${otpMatch.group(0)}');
-        print('📋 Copy this code to verify your phone number');
-        print(
-          '🔒 Note: Verify numbers at: https://console.twilio.com/us1/develop/phone-numbers/verified\n',
-        );
-      }
-
-      // Simulate network delay
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Always return true for testing
+    final uri = Uri.https(
+      'api.twilio.com',
+      '/2010-04-01/Accounts/$_accountSid/Messages.json',
+    );
+    final response = await http.post(
+      uri,
+      headers: <String, String>{
+        'Authorization':
+            'Basic ' + base64Encode(utf8.encode('$_accountSid:$_authToken')),
+      },
+      body: <String, String>{'From': _phoneNumber, 'To': to, 'Body': message},
+    );
+    if (response.statusCode == 201) {
+      print('✅ SMS sent to $to');
       return true;
-    } catch (e) {
-      print('Error in mock SMS: $e');
+    } else {
+      print('❌ Failed to send SMS: ${response.statusCode} ${response.body}');
       return false;
     }
   }

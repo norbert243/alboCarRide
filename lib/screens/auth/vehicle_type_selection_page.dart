@@ -45,11 +45,7 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
       );
 
       // Navigate to AuthWrapper to determine next step
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/auth_wrapper',
-        (route) => false,
-      );
+      Navigator.pushNamed(context, '/auth_wrapper');
     } catch (e) {
       CustomToast.showError(
         context: context,
@@ -67,6 +63,10 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Select Vehicle Type',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),

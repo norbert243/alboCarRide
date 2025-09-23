@@ -9,6 +9,10 @@ import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
+import 'package:albocarride/screens/home/book_ride_page.dart';
+import 'package:albocarride/screens/home/ride_history_page.dart';
+import 'package:albocarride/screens/home/payments_page.dart';
+import 'package:albocarride/screens/home/support_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +35,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AlboCarRide',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
@@ -101,7 +106,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const AuthWrapper(),
+      home: const CustomerHomePage(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
@@ -119,6 +124,10 @@ class MyApp extends StatelessWidget {
         '/waiting-review': (context) => const WaitingForReviewPage(),
         '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
         '/customer-home': (context) => const CustomerHomePage(),
+        '/book-ride': (context) => const BookRidePage(),
+        '/ride-history': (context) => const RideHistoryPage(),
+        '/payments': (context) => const PaymentsPage(),
+        '/support': (context) => const SupportPage(),
       },
     );
   }

@@ -223,26 +223,17 @@ class _SignupPageState extends State<SignupPage> {
 
   void _navigateBasedOnRole(String role) {
     if (role == 'customer') {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/customer_home',
-        (route) => false,
-      );
+      Navigator.pushNamed(context, '/customer_home');
     } else if (role == 'driver') {
       // For drivers, navigate to vehicle type selection first
-      Navigator.pushNamedAndRemoveUntil(
+      Navigator.pushNamed(
         context,
         '/vehicle-type-selection',
-        (route) => false,
         arguments: Supabase.instance.client.auth.currentUser!.id,
       );
     } else {
       // Fallback to role selection if role is invalid
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/role-selection',
-        (route) => false,
-      );
+      Navigator.pushNamed(context, '/role-selection');
     }
   }
 
@@ -342,6 +333,10 @@ class _SignupPageState extends State<SignupPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(
           'Sign Up as ${widget.role.capitalize()}',
           style: const TextStyle(
