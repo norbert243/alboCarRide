@@ -4,6 +4,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:albocarride/screens/auth/auth_wrapper.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
 import 'package:albocarride/screens/auth/signup_page.dart';
+import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
+import 'package:albocarride/screens/driver/verification_page.dart';
+import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
+import 'package:albocarride/screens/home/customer_home_page.dart';
+import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -98,6 +103,7 @@ class MyApp extends StatelessWidget {
       ),
       home: const AuthWrapper(),
       routes: {
+        '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
         '/signup': (context) {
           final role =
@@ -105,6 +111,14 @@ class MyApp extends StatelessWidget {
               'customer';
           return SignupPage(role: role);
         },
+        '/vehicle-type-selection': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as String?;
+          return VehicleTypeSelectionPage(driverId: args ?? '');
+        },
+        '/verification': (context) => const VerificationPage(),
+        '/waiting-review': (context) => const WaitingForReviewPage(),
+        '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
+        '/customer-home': (context) => const CustomerHomePage(),
       },
     );
   }

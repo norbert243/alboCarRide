@@ -8,7 +8,9 @@ CREATE TABLE profiles (
     phone VARCHAR(20) UNIQUE,
     role VARCHAR(20) NOT NULL CHECK (role IN ('customer', 'driver')),
     avatar_url TEXT,
-    is_verified BOOLEAN DEFAULT FALSE,
+    verification_status VARCHAR(20) CHECK (verification_status IN ('pending', 'approved', 'rejected')),
+    verification_submitted_at TIMESTAMP WITH TIME ZONE,
+    is_online BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -18,13 +20,12 @@ CREATE TABLE drivers (
     id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
     license_number VARCHAR(100),
     license_expiry DATE,
+    vehicle_type VARCHAR(20) CHECK (vehicle_type IN ('car', 'motorcycle')),
     vehicle_make VARCHAR(100),
     vehicle_model VARCHAR(100),
     vehicle_year INTEGER,
     vehicle_color VARCHAR(50),
     license_plate VARCHAR(20),
-    is_approved BOOLEAN DEFAULT FALSE,
-    is_online BOOLEAN DEFAULT FALSE,
     current_latitude DECIMAL(10, 8),
     current_longitude DECIMAL(10, 8),
     rating DECIMAL(3, 2) DEFAULT 0.0,
@@ -139,13 +140,27 @@ CREATE TABLE ride_locations (
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Driver documents table
+CREATE TABLE driver_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    document_type VARCHAR(50) NOT NULL CHECK (document_type IN ('driver_license', 'vehicle_registration', 'profile_photo', 'vehicle_photo')),
+    document_url TEXT NOT NULL,
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    verification_status VARCHAR(20) DEFAULT 'pending' CHECK (verification_status IN ('pending', 'approved', 'rejected')),
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    reviewer_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Notifications table
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('ride_update', 'payment', 'promotion', 'system')),
+    type VARCHAR(50) NOT NULL CHECK (type IN ('ride_update', 'payment', 'promotion', 'system', 'verification')),
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -192,15 +207,18 @@ CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON payments
 CREATE TRIGGER update_driver_earnings_updated_at BEFORE UPDATE ON driver_earnings
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_driver_documents_updated_at BEFORE UPDATE ON driver_documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Insert sample data (optional)
 -- Note: These sample profiles would require corresponding auth.users entries
--- INSERT INTO profiles (id, full_name, phone, role) VALUES
--- ('00000000-0000-0000-0000-000000000001', 'System Admin', '+1234567890', 'customer'),
--- ('00000000-0000-0000-0000-000000000002', 'John Driver', '+1234567891', 'driver'),
--- ('00000000-0000-0000-0000-000000000003', 'Sarah Customer', '+1234567892', 'customer');
+-- INSERT INTO profiles (id, full_name, phone, role, verification_status) VALUES
+-- ('00000000-0000-0000-0000-000000000001', 'System Admin', '+1234567890', 'customer', 'approved'),
+-- ('00000000-0000-0000-0000-000000000002', 'John Driver', '+1234567891', 'driver', 'approved'),
+-- ('00000000-0000-0000-0000-000000000003', 'Sarah Customer', '+1234567892', 'customer', 'approved');
 
--- INSERT INTO drivers (id, license_number, vehicle_make, vehicle_model, license_plate, is_approved, is_online) VALUES
--- ('00000000-0000-0000-0000-000000000002', 'DRV123456', 'Toyota', 'Corolla', 'ABC123', TRUE, TRUE);
+-- INSERT INTO drivers (id, license_number, vehicle_type, vehicle_make, vehicle_model, license_plate) VALUES
+-- ('00000000-0000-0000-0000-000000000002', 'DRV123456', 'car', 'Toyota', 'Corolla', 'ABC123');
 
 -- INSERT INTO customers (id, preferred_payment_method) VALUES
 -- ('00000000-0000-0000-0000-000000000003', 'card');

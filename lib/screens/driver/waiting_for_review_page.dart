@@ -1,0 +1,230 @@
+import 'package:flutter/material.dart';
+
+class WaitingForReviewPage extends StatelessWidget {
+  const WaitingForReviewPage({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text(
+          'Verification Pending',
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Status Icon
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.orange.withAlpha(26),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.hourglass_top,
+                size: 60,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Title
+            const Text(
+              'Documents Under Review',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+
+            // Description
+            const Text(
+              'Your documents have been submitted and are currently being reviewed by our team.',
+              style: TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Timeline Information
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(13),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  _buildTimelineItem(
+                    icon: Icons.check_circle,
+                    color: Colors.green,
+                    title: 'Documents Submitted',
+                    description:
+                        'Your documents have been successfully uploaded',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTimelineItem(
+                    icon: Icons.hourglass_top,
+                    color: Colors.orange,
+                    title: 'Under Review',
+                    description: 'Our team is verifying your documents',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTimelineItem(
+                    icon: Icons.notifications,
+                    color: Colors.blue,
+                    title: 'Notification',
+                    description:
+                        'You will receive a notification once approved',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Estimated Time
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withAlpha(26),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.access_time, color: Colors.blue, size: 20),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Estimated Review Time',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Typically 24-48 hours',
+                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Action Buttons
+            Column(
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    // Navigate back to home or check status
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/auth_wrapper',
+                      (route) => false,
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Check Status'),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    // Contact support
+                    // This could open email or support chat
+                  },
+                  child: const Text(
+                    'Contact Support',
+                    style: TextStyle(color: Colors.blue),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withAlpha(26),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 20, color: color),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}

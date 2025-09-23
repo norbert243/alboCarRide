@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
-import 'package:albocarride/services/ride_negotiation_service.dart';
-import 'package:provider/provider.dart';
 
 class DriverHomePage extends StatefulWidget {
   const DriverHomePage({super.key});
@@ -50,7 +48,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
         }
       }
     } catch (e) {
-      print('Error toggling online status: $e');
+      debugPrint('Error toggling online status: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -83,7 +81,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
         }
       }
     } catch (e) {
-      print('Error loading online status: $e');
+      debugPrint('Error loading online status: $e');
     }
   }
 
@@ -108,7 +106,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
               margin: const EdgeInsets.all(8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withAlpha(51), // 0.2 opacity
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -135,15 +133,17 @@ class _DriverHomePageState extends State<DriverHomePage> {
             ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _signOut();
-              if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/role-selection',
-                  (route) => false,
-                );
-              }
+            onPressed: () {
+              final navigatorContext = context;
+              _signOut().then((_) {
+                if (navigatorContext.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    navigatorContext,
+                    '/role-selection',
+                    (route) => false,
+                  );
+                }
+              });
             },
           ),
         ],
@@ -186,7 +186,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                         : 'Ready to start earning?',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withAlpha(229), // 0.9 opacity
                     ),
                   ),
                 ],
@@ -202,7 +202,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withAlpha(13), // 0.05 opacity
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -346,7 +346,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withAlpha(26), // 0.1 opacity
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 24, color: color),
@@ -382,7 +382,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13), // 0.05 opacity
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -394,7 +394,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha(26), // 0.1 opacity
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 20, color: color),

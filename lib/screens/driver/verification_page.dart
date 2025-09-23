@@ -131,11 +131,11 @@ class _VerificationPageState extends State<VerificationPage> {
         }
       }
 
-      // Update user verification status
+      // Update user verification status to 'pending' for admin review
       await Supabase.instance.client
           .from('profiles')
           .update({
-            'verification_status': 'pending_review',
+            'verification_status': 'pending',
             'verification_submitted_at': DateTime.now().toIso8601String(),
           })
           .eq('id', userId);
@@ -148,9 +148,13 @@ class _VerificationPageState extends State<VerificationPage> {
         );
       }
 
-      // Navigate back or to home page
+      // Navigate to waiting for review page
       if (!mounted) return;
-      Navigator.pop(currentContext);
+      Navigator.pushNamedAndRemoveUntil(
+        currentContext,
+        '/waiting-review',
+        (route) => false,
+      );
     } catch (e) {
       if (mounted) {
         AuthErrorHandler.handleAuthError(
@@ -242,74 +246,79 @@ class _VerificationPageState extends State<VerificationPage> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Complete Your Driver Verification',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please upload the following documents to complete your driver verification process. '
-              'This helps us ensure the safety and reliability of our service.',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Complete Your Driver Verification',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please upload the following documents to complete your driver verification process. '
+                'This helps us ensure the safety and reliability of our service.',
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 24),
 
-            // Document upload sections
-            _buildDocumentCard(DocumentType.driverLicense),
-            _buildDocumentCard(DocumentType.vehicleRegistration),
-            _buildDocumentCard(DocumentType.insuranceCertificate),
-            _buildDocumentCard(DocumentType.profilePhoto),
-            _buildDocumentCard(DocumentType.vehiclePhoto),
+              // Document upload sections
+              _buildDocumentCard(DocumentType.driverLicense),
+              _buildDocumentCard(DocumentType.vehicleRegistration),
+              _buildDocumentCard(DocumentType.profilePhoto),
+              _buildDocumentCard(DocumentType.vehiclePhoto),
 
-            const SizedBox(height: 32),
+              const SizedBox(height: 32),
 
-            // Submit button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitVerification,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              // Submit button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitVerification,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'Submit Verification',
+                          style: TextStyle(fontSize: 16),
                         ),
-                      )
-                    : const Text(
-                        'Submit Verification',
-                        style: TextStyle(fontSize: 16),
-                      ),
+                ),
               ),
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // Info text
-            Text(
-              'Note: All documents will be reviewed by our team. '
-              'You will receive a notification once your verification is complete. '
-              'This process typically takes 1-2 business days.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
+              // Info text
+              Text(
+                'Note: All documents will be reviewed by our team. '
+                'You will receive a notification once your verification is complete. '
+                'This process typically takes 1-2 business days.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );

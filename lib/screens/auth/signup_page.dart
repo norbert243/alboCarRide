@@ -117,31 +117,27 @@ class _SignupPageState extends State<SignupPage> {
       if (authResponse.user != null) {
         print('User created with ID: ${authResponse.user!.id}');
 
-        // Save user profile to profiles table
+        // Save user profile to profiles table using UPSERT to prevent duplicate key errors
         try {
-          final profileResponse =
-              await Supabase.instance.client.from('profiles').insert({
-                'id': authResponse.user!.id,
-                'full_name': fullName,
-                'phone': phoneNumber,
-                'role': widget.role,
-              }).select();
+          final profileResponse = await _createOrUpdateProfile(
+            userId: authResponse.user!.id,
+            phone: phoneNumber,
+            fullName: fullName,
+            role: widget.role,
+          );
 
-          print('Profile created successfully: $profileResponse');
+          print('Profile created/updated successfully: $profileResponse');
 
-          // Create driver-specific record if role is driver
+          // Create driver-specific record if role is driver using UPSERT
           if (widget.role == 'driver') {
             try {
-              final driverResponse =
-                  await Supabase.instance.client.from('drivers').insert({
-                    'id': authResponse.user!.id,
-                    'is_approved': false,
-                    'is_online': false,
-                    'rating': 0.0,
-                    'total_rides': 0,
-                  }).select();
+              final driverResponse = await _createOrUpdateDriver(
+                userId: authResponse.user!.id,
+              );
 
-              print('Driver record created successfully: $driverResponse');
+              print(
+                'Driver record created/updated successfully: $driverResponse',
+              );
             } catch (driverError) {
               print('Error creating driver record: $driverError');
               if (mounted) {
@@ -154,18 +150,16 @@ class _SignupPageState extends State<SignupPage> {
             }
           }
 
-          // Create customer-specific record if role is customer
+          // Create customer-specific record if role is customer using UPSERT
           if (widget.role == 'customer') {
             try {
-              final customerResponse =
-                  await Supabase.instance.client.from('customers').insert({
-                    'id': authResponse.user!.id,
-                    'preferred_payment_method': 'cash',
-                    'rating': 0.0,
-                    'total_rides': 0,
-                  }).select();
+              final customerResponse = await _createOrUpdateCustomer(
+                userId: authResponse.user!.id,
+              );
 
-              print('Customer record created successfully: $customerResponse');
+              print(
+                'Customer record created/updated successfully: $customerResponse',
+              );
             } catch (customerError) {
               print('Error creating customer record: $customerError');
               if (mounted) {
@@ -229,18 +223,117 @@ class _SignupPageState extends State<SignupPage> {
 
   void _navigateBasedOnRole(String role) {
     if (role == 'customer') {
-      Navigator.pushReplacement(
+      Navigator.pushNamedAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const CustomerHomePage()),
+        '/customer_home',
+        (route) => false,
       );
     } else if (role == 'driver') {
-      Navigator.pushReplacement(
+      // For drivers, navigate to vehicle type selection first
+      Navigator.pushNamedAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const DriverHomePage()),
+        '/vehicle-type-selection',
+        (route) => false,
+        arguments: Supabase.instance.client.auth.currentUser!.id,
       );
     } else {
       // Fallback to role selection if role is invalid
-      Navigator.pushReplacementNamed(context, '/role-selection');
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/role-selection',
+        (route) => false,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _createOrUpdateProfile({
+    required String userId,
+    required String phone,
+    required String fullName,
+    required String role,
+  }) async {
+    final supabase = Supabase.instance.client;
+
+    final payload = {
+      'id': userId,
+      'full_name': fullName,
+      'phone': phone,
+      'role': role,
+      'updated_at': DateTime.now().toIso8601String(),
+      // Don't set verification_status initially - let it be null
+      // This allows the user to go through the proper flow
+    };
+
+    try {
+      final response = await supabase.from('profiles').upsert(payload).select();
+
+      if (response.isEmpty) {
+        throw Exception('Failed to create/update profile: No data returned');
+      }
+
+      return response.first as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Failed to create/update profile: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> _createOrUpdateDriver({
+    required String userId,
+  }) async {
+    final supabase = Supabase.instance.client;
+
+    final payload = {
+      'id': userId,
+      'is_approved': false,
+      'is_online': false,
+      'rating': 0.0,
+      'total_rides': 0,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final response = await supabase.from('drivers').upsert(payload).select();
+
+      if (response.isEmpty) {
+        throw Exception(
+          'Failed to create/update driver record: No data returned',
+        );
+      }
+
+      return response.first as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Failed to create/update driver record: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> _createOrUpdateCustomer({
+    required String userId,
+  }) async {
+    final supabase = Supabase.instance.client;
+
+    final payload = {
+      'id': userId,
+      'preferred_payment_method': 'cash',
+      'rating': 0.0,
+      'total_rides': 0,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final response = await supabase
+          .from('customers')
+          .upsert(payload)
+          .select();
+
+      if (response.isEmpty) {
+        throw Exception(
+          'Failed to create/update customer record: No data returned',
+        );
+      }
+
+      return response.first as Map<String, dynamic>;
+    } catch (e) {
+      throw Exception('Failed to create/update customer record: $e');
     }
   }
 
@@ -262,153 +355,162 @@ class _SignupPageState extends State<SignupPage> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              const SizedBox(height: 20),
-              Text(
-                'Create Account',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height,
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header
+                const SizedBox(height: 20),
+                Text(
+                  'Create Account',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Join AlboCarRide as a ${widget.role}',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  height: 1.4,
+                const SizedBox(height: 8),
+                Text(
+                  'Join AlboCarRide as a ${widget.role}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 40),
+                const SizedBox(height: 40),
 
-              // Form Fields
-              _buildTextField(
-                controller: _phoneController,
-                label: 'Phone Number',
-                icon: Icons.phone_outlined,
-                keyboardType: TextInputType.phone,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your phone number';
-                  }
-                  if (value.length < 10) {
-                    return 'Please enter a valid phone number';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-
-              _buildTextField(
-                controller: _fullNameController,
-                label: 'Full Name',
-                icon: Icons.person_outline,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your full name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-
-              if (_otpSent) ...[
+                // Form Fields
                 _buildTextField(
-                  controller: _otpController,
-                  label: 'Verification Code',
-                  icon: Icons.sms_outlined,
-                  keyboardType: TextInputType.number,
+                  controller: _phoneController,
+                  label: 'Phone Number',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter the verification code';
+                      return 'Please enter your phone number';
                     }
-                    if (value.length != 6) {
-                      return 'Verification code must be 6 digits';
+                    if (value.length < 10) {
+                      return 'Please enter a valid phone number';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 20),
-              ],
 
-              if (!_otpSent) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'We\'ll send a verification code to your phone',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
+                _buildTextField(
+                  controller: _fullNameController,
+                  label: 'Full Name',
+                  icon: Icons.person_outlined,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter your full name';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 32),
-              ] else ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Enter the 6-digit code sent to your phone',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-              ],
+                const SizedBox(height: 20),
 
-              // Submit Button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                if (_otpSent) ...[
+                  _buildTextField(
+                    controller: _otpController,
+                    label: 'Verification Code',
+                    icon: Icons.sms_outlined,
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter the verification code';
+                      }
+                      if (value.length != 6) {
+                        return 'Verification code must be 6 digits';
+                      }
+                      return null;
+                    },
                   ),
-                  elevation: 2,
+                  const SizedBox(height: 20),
+                ],
+
+                if (!_otpSent) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'We\'ll send a verification code to your phone',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Enter the 6-digit code sent to your phone',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                ],
+
+                // Submit Button
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          _otpSent
+                              ? 'Verify & Continue'
+                              : 'Send Verification Code',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      )
-                    : Text(
-                        _otpSent
-                            ? 'Verify & Continue'
-                            : 'Send Verification Code',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                const SizedBox(height: 24),
+
+                if (_otpSent) ...[
+                  TextButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() {
+                            _otpSent = false;
+                            _otpController.clear();
+                          }),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.deepPurple,
+                    ),
+                    child: const Text(
+                      'Change phone number',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-              ),
-              const SizedBox(height: 24),
-
-              if (_otpSent) ...[
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => setState(() {
-                          _otpSent = false;
-                          _otpController.clear();
-                        }),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.deepPurple,
+                    ),
                   ),
-                  child: const Text(
-                    'Change phone number',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                ),
+                ],
+                const SizedBox(height: 40),
               ],
-            ],
+            ),
           ),
         ),
       ),

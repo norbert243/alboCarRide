@@ -5,9 +5,18 @@ import 'package:albocarride/services/session_service.dart';
 class CustomerHomePage extends StatelessWidget {
   const CustomerHomePage({super.key});
 
-  Future<void> _signOut() async {
+  Future<void> _signOut(BuildContext context) async {
     await Supabase.instance.client.auth.signOut();
     await SessionService.clearSession();
+
+    final navigatorContext = context;
+    if (navigatorContext.mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        navigatorContext,
+        '/role-selection',
+        (route) => false,
+      );
+    }
   }
 
   @override
@@ -25,14 +34,7 @@ class CustomerHomePage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _signOut();
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/role-selection',
-                (route) => false,
-              );
-            },
+            onPressed: () => _signOut(context),
           ),
         ],
       ),
@@ -70,7 +72,7 @@ class CustomerHomePage extends StatelessWidget {
                     'Ready to book your next ride?',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withAlpha(229), // 0.9 opacity
                     ),
                   ),
                 ],
@@ -182,7 +184,7 @@ class CustomerHomePage extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withAlpha(26), // 0.1 opacity
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 24, color: color),
@@ -218,7 +220,7 @@ class CustomerHomePage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13), // 0.05 opacity
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -230,7 +232,7 @@ class CustomerHomePage extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withAlpha(26), // 0.1 opacity
               shape: BoxShape.circle,
             ),
             child: Icon(icon, size: 20, color: color),

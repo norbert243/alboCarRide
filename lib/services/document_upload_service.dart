@@ -1,17 +1,14 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
-import 'package:http/http.dart' as http;
 
 /// Types of documents that can be uploaded for driver verification
 enum DocumentType {
   driverLicense,
   vehicleRegistration,
-  insuranceCertificate,
   profilePhoto,
   vehiclePhoto,
 }
@@ -289,8 +286,6 @@ extension DocumentTypeExtension on DocumentType {
         return 'Driver License';
       case DocumentType.vehicleRegistration:
         return 'Vehicle Registration';
-      case DocumentType.insuranceCertificate:
-        return 'Insurance Certificate';
       case DocumentType.profilePhoto:
         return 'Profile Photo';
       case DocumentType.vehiclePhoto:
@@ -304,8 +299,6 @@ extension DocumentTypeExtension on DocumentType {
         return 'Upload a clear photo of your valid driver\'s license';
       case DocumentType.vehicleRegistration:
         return 'Upload your vehicle registration document';
-      case DocumentType.insuranceCertificate:
-        return 'Upload your insurance certificate or card';
       case DocumentType.profilePhoto:
         return 'Upload a clear profile photo for identification';
       case DocumentType.vehiclePhoto:
@@ -317,7 +310,6 @@ extension DocumentTypeExtension on DocumentType {
     switch (this) {
       case DocumentType.driverLicense:
       case DocumentType.vehicleRegistration:
-      case DocumentType.insuranceCertificate:
         return true;
       case DocumentType.profilePhoto:
       case DocumentType.vehiclePhoto:

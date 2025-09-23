@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Supabase Flutter SDK for authentication and database
-  supabase_flutter: ^2.9.1
+  supabase_flutter: ^2.10.1
 
   # Environment variables
   flutter_dotenv: ^5.1.0
@@ -64,6 +64,9 @@ dependencies:
 
   # UUID generation
   uuid: ^4.4.0
+
+  # Location services for driver tracking
+  geolocator: ^11.0.1
 
 dev_dependencies:
   flutter_test:
