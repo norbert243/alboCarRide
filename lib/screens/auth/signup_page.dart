@@ -279,8 +279,10 @@ class _SignupPageState extends State<SignupPage> {
       }
 
       if (mounted) {
-        print('Navigating to ${widget.role} homepage');
-        _navigateBasedOnRole(widget.role);
+        print(
+          'Navigating based on user status: isNewUser=$isNewUser, role=${widget.role}',
+        );
+        await _navigateBasedOnUserStatus(widget.role, userId, isNewUser);
       }
     } catch (e) {
       print('Error in completeRegistration: $e');
@@ -291,16 +293,102 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
-  void _navigateBasedOnRole(String role) {
+  Future<void> _navigateBasedOnUserStatus(
+    String role,
+    String userId,
+    bool isNewUser,
+  ) async {
+    final supabase = Supabase.instance.client;
+
     if (role == 'customer') {
+      // For customers, always go to customer home
       Navigator.pushNamed(context, '/customer_home');
     } else if (role == 'driver') {
-      // For drivers, navigate to vehicle type selection first
-      Navigator.pushNamed(
-        context,
-        '/vehicle-type-selection',
-        arguments: Supabase.instance.client.auth.currentUser!.id,
-      );
+      // For drivers, check their current verification status
+      try {
+        // Get the current profile to check verification status
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('verification_status, drivers(vehicle_type)')
+            .eq('id', userId)
+            .single();
+
+        final verificationStatus =
+            profileResponse['verification_status'] as String?;
+        final vehicleType =
+            profileResponse['drivers']?['vehicle_type'] as String?;
+
+        print('Driver navigation debug:');
+        print('  isNewUser: $isNewUser');
+        print('  verificationStatus: $verificationStatus');
+        print('  vehicleType: $vehicleType');
+
+        // Handle navigation based on verification status and vehicle type
+        if (isNewUser) {
+          // New driver - start with vehicle type selection
+          print('  Routing new driver to vehicle type selection');
+          Navigator.pushNamed(
+            context,
+            '/vehicle-type-selection',
+            arguments: userId,
+          );
+        } else {
+          // Existing driver - check what step they need to complete
+          if (verificationStatus == null || verificationStatus.isEmpty) {
+            // No verification status set - check vehicle type
+            if (vehicleType == null || vehicleType.isEmpty) {
+              // No vehicle type set - go to vehicle selection
+              print('  Routing existing driver to vehicle type selection');
+              Navigator.pushNamed(
+                context,
+                '/vehicle-type-selection',
+                arguments: userId,
+              );
+            } else {
+              // Vehicle type set but no verification - go to verification
+              print('  Routing existing driver to verification');
+              Navigator.pushNamed(context, '/verification');
+            }
+          } else if (verificationStatus == 'pending') {
+            // Verification pending - go to waiting review
+            print('  Routing existing driver to waiting review');
+            Navigator.pushNamed(context, '/waiting-review');
+          } else if (verificationStatus == 'rejected') {
+            // Verification rejected - go to verification to resubmit
+            print('  Routing existing driver to verification (rejected)');
+            Navigator.pushNamed(context, '/verification');
+          } else if (verificationStatus == 'approved') {
+            // Verification approved - check vehicle type
+            if (vehicleType == null || vehicleType.isEmpty) {
+              // Approved but no vehicle type - go to vehicle selection
+              print(
+                '  Routing existing driver to vehicle type selection (approved)',
+              );
+              Navigator.pushNamed(
+                context,
+                '/vehicle-type-selection',
+                arguments: userId,
+              );
+            } else {
+              // Everything complete - go to driver home
+              print('  Routing existing driver to driver home');
+              Navigator.pushNamed(context, '/enhanced_driver_home');
+            }
+          } else {
+            // Unknown status - default to verification
+            print('  Routing existing driver to verification (unknown status)');
+            Navigator.pushNamed(context, '/verification');
+          }
+        }
+      } catch (e) {
+        print('Error checking driver status: $e');
+        // Fallback to vehicle type selection
+        Navigator.pushNamed(
+          context,
+          '/vehicle-type-selection',
+          arguments: userId,
+        );
+      }
     } else {
       // Fallback to role selection if role is invalid
       Navigator.pushNamed(context, '/role-selection');
