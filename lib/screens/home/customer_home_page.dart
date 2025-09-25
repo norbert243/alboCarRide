@@ -24,6 +24,10 @@ class CustomerHomePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Customer Dashboard',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
@@ -104,25 +108,25 @@ class CustomerHomePage extends StatelessWidget {
                   icon: Icons.directions_car,
                   title: 'Book Ride',
                   color: Colors.green,
-                  onTap: () {},
+                  onTap: () => Navigator.pushNamed(context, '/book-ride'),
                 ),
                 _buildActionCard(
                   icon: Icons.history,
                   title: 'Ride History',
                   color: Colors.orange,
-                  onTap: () {},
+                  onTap: () => Navigator.pushNamed(context, '/ride-history'),
                 ),
                 _buildActionCard(
                   icon: Icons.payment,
                   title: 'Payment',
                   color: Colors.purple,
-                  onTap: () {},
+                  onTap: () => Navigator.pushNamed(context, '/payments'),
                 ),
                 _buildActionCard(
                   icon: Icons.support_agent,
                   title: 'Support',
                   color: Colors.red,
-                  onTap: () {},
+                  onTap: () => Navigator.pushNamed(context, '/support'),
                 ),
               ],
             ),

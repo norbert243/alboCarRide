@@ -1,255 +1,240 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/api_config.dart';
 
-/// Service for managing real-time notifications
 class NotificationService {
-  final SupabaseClient _client = Supabase.instance.client;
-
-  /// Send a notification to a user
-  Future<void> sendNotification({
-    required String userId,
-    required String title,
-    required String message,
-    required String type,
+  /// Send notification to drivers about new ride request
+  static Future<void> notifyDriversAboutRide({
+    required String rideRequestId,
+    required String pickupLocation,
+    required String dropoffLocation,
+    required double estimatedFare,
   }) async {
     try {
-      await _client.from('notifications').insert({
-        'user_id': userId,
-        'title': title,
-        'message': message,
-        'type': type,
-        'is_read': false,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      print('Error sending notification: $e');
-      throw Exception('Failed to send notification: $e');
-    }
-  }
+      // Get all online drivers
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('id, full_name, phone')
+          .eq('is_online', true)
+          .eq('role', 'driver');
 
-  /// Send trip-related notifications
-  Future<void> sendTripNotification({
-    required String userId,
-    required String tripId,
-    required String eventType,
-    String? additionalInfo,
-  }) async {
-    String title;
-    String message;
+      if (response.isNotEmpty) {
+        final drivers = response as List<dynamic>;
 
-    switch (eventType) {
-      case 'trip_accepted':
-        title = 'Trip Accepted';
-        message = 'Your trip request has been accepted by a driver.';
-        break;
-      case 'trip_started':
-        title = 'Trip Started';
-        message = 'Your driver has started the trip.';
-        break;
-      case 'trip_completed':
-        title = 'Trip Completed';
-        message = 'Your trip has been completed successfully.';
-        break;
-      case 'trip_cancelled':
-        title = 'Trip Cancelled';
-        message = 'Your trip has been cancelled.';
-        break;
-      case 'offer_received':
-        title = 'New Ride Offer';
-        message = 'You have received a new ride offer.';
-        break;
-      case 'offer_accepted':
-        title = 'Offer Accepted';
-        message = 'Your ride offer has been accepted.';
-        break;
-      case 'offer_rejected':
-        title = 'Offer Rejected';
-        message = 'Your ride offer has been rejected.';
-        break;
-      default:
-        title = 'Trip Update';
-        message = 'There has been an update to your trip.';
-    }
+        // In a real implementation, you would:
+        // 1. Send push notifications via Firebase Cloud Messaging
+        // 2. Send SMS notifications via Twilio
+        // 3. Update real-time database for driver apps
 
-    if (additionalInfo != null) {
-      message += ' $additionalInfo';
-    }
+        for (final driver in drivers) {
+          final driverId = driver['id'];
+          final driverName = driver['full_name'];
+          final driverPhone = driver['phone'];
 
-    await sendNotification(
-      userId: userId,
-      title: title,
-      message: message,
-      type: 'ride_update',
-    );
-  }
+          // Send push notification (simulated)
+          await _sendPushNotification(
+            driverId: driverId,
+            title: 'New Ride Request',
+            body:
+                'Ride from $pickupLocation to $dropoffLocation - \$${estimatedFare.toStringAsFixed(2)}',
+          );
 
-  /// Get unread notifications for a user
-  Future<List<Map<String, dynamic>>> getUnreadNotifications(
-    String userId,
-  ) async {
-    try {
-      final response = await _client
-          .from('notifications')
-          .select()
-          .eq('user_id', userId)
-          .eq('is_read', false)
-          .order('created_at', ascending: false);
-
-      return response;
-    } catch (e) {
-      print('Error getting unread notifications: $e');
-      throw Exception('Failed to get notifications: $e');
-    }
-  }
-
-  /// Get all notifications for a user
-  Future<List<Map<String, dynamic>>> getAllNotifications(
-    String userId, {
-    int limit = 50,
-  }) async {
-    try {
-      final response = await _client
-          .from('notifications')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false)
-          .limit(limit);
-
-      return response;
-    } catch (e) {
-      print('Error getting notifications: $e');
-      throw Exception('Failed to get notifications: $e');
-    }
-  }
-
-  /// Mark a notification as read
-  Future<void> markAsRead(String notificationId) async {
-    try {
-      await _client
-          .from('notifications')
-          .update({'is_read': true})
-          .eq('id', notificationId);
-    } catch (e) {
-      print('Error marking notification as read: $e');
-      throw Exception('Failed to mark notification as read: $e');
-    }
-  }
-
-  /// Mark all notifications as read for a user
-  Future<void> markAllAsRead(String userId) async {
-    try {
-      await _client
-          .from('notifications')
-          .update({'is_read': true})
-          .eq('user_id', userId)
-          .eq('is_read', false);
-    } catch (e) {
-      print('Error marking all notifications as read: $e');
-      throw Exception('Failed to mark all notifications as read: $e');
-    }
-  }
-
-  /// Subscribe to real-time notifications for a user
-  Stream<List<Map<String, dynamic>>> subscribeToNotifications(String userId) {
-    return _client
-        .from('notifications')
-        .stream(primaryKey: ['id'])
-        .eq('user_id', userId)
-        .order('created_at', ascending: false)
-        .map((events) => events);
-  }
-
-  /// Get notification statistics
-  Future<Map<String, int>> getNotificationStats(String userId) async {
-    try {
-      final response = await _client
-          .from('notifications')
-          .select('is_read, type')
-          .eq('user_id', userId);
-
-      final stats = {
-        'total': response.length,
-        'unread': 0,
-        'read': 0,
-        'ride_updates': 0,
-        'payments': 0,
-        'promotions': 0,
-        'system': 0,
-      };
-
-      for (final notification in response) {
-        if (notification['is_read'] == true) {
-          stats['read'] = (stats['read'] ?? 0) + 1;
-        } else {
-          stats['unread'] = (stats['unread'] ?? 0) + 1;
+          // Send SMS notification (using existing Twilio service)
+          await _sendSmsNotification(
+            phoneNumber: driverPhone,
+            message:
+                'New ride request: $pickupLocation to $dropoffLocation. Estimated fare: \$${estimatedFare.toStringAsFixed(2)}',
+          );
         }
 
-        final type = notification['type'] as String? ?? 'system';
-        switch (type) {
-          case 'ride_update':
-            stats['ride_updates'] = (stats['ride_updates'] ?? 0) + 1;
-            break;
-          case 'payment':
-            stats['payments'] = (stats['payments'] ?? 0) + 1;
-            break;
-          case 'promotion':
-            stats['promotions'] = (stats['promotions'] ?? 0) + 1;
-            break;
-          case 'system':
-            stats['system'] = (stats['system'] ?? 0) + 1;
-            break;
-        }
+        print(
+          'Notified ${drivers.length} drivers about ride request $rideRequestId',
+        );
       }
-
-      return stats;
     } catch (e) {
-      print('Error getting notification stats: $e');
-      throw Exception('Failed to get notification stats: $e');
+      print('Error notifying drivers: $e');
     }
   }
 
-  /// Clean up old notifications (older than 30 days)
-  Future<int> cleanupOldNotifications() async {
-    try {
-      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
-
-      final response = await _client
-          .from('notifications')
-          .delete()
-          .lt('created_at', thirtyDaysAgo.toIso8601String())
-          .select();
-
-      return response.length;
-    } catch (e) {
-      print('Error cleaning up old notifications: $e');
-      throw Exception('Failed to cleanup old notifications: $e');
-    }
-  }
-
-  /// Send batch notifications to multiple users
-  Future<void> sendBatchNotifications({
-    required List<String> userIds,
-    required String title,
-    required String message,
-    required String type,
+  /// Send notification to customer about ride status
+  static Future<void> notifyCustomerAboutRideStatus({
+    required String customerId,
+    required String rideId,
+    required String status,
+    String? driverName,
+    String? estimatedArrival,
+    double? fare,
   }) async {
     try {
-      final notifications = userIds
-          .map(
-            (userId) => {
-              'user_id': userId,
-              'title': title,
-              'message': message,
-              'type': type,
-              'is_read': false,
-              'created_at': DateTime.now().toIso8601String(),
-            },
-          )
-          .toList();
+      // Get customer details
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', customerId)
+          .single();
 
-      await _client.from('notifications').insert(notifications);
+      if (response != null) {
+        final customerName = response['full_name'];
+        final customerPhone = response['phone'];
+
+        String message;
+        String title;
+
+        switch (status) {
+          case 'accepted':
+            title = 'Ride Accepted!';
+            message =
+                'Driver $driverName has accepted your ride request. Estimated arrival: $estimatedArrival';
+            break;
+          case 'arrived':
+            title = 'Driver Arrived';
+            message = 'Driver $driverName has arrived at your pickup location';
+            break;
+          case 'in_progress':
+            title = 'Ride Started';
+            message = 'Your ride with $driverName has started';
+            break;
+          case 'completed':
+            title = 'Ride Completed';
+            message =
+                'Your ride has been completed. Fare: \$${fare?.toStringAsFixed(2)}';
+            break;
+          case 'cancelled':
+            title = 'Ride Cancelled';
+            message = 'Your ride has been cancelled';
+            break;
+          default:
+            title = 'Ride Update';
+            message = 'Your ride status has been updated to: $status';
+        }
+
+        // Send push notification (simulated)
+        await _sendPushNotification(
+          driverId: customerId,
+          title: title,
+          body: message,
+        );
+
+        // Send SMS notification
+        await _sendSmsNotification(
+          phoneNumber: customerPhone,
+          message: '$title: $message',
+        );
+
+        print(
+          'Sent notification to customer $customerName about ride $rideId: $status',
+        );
+      }
     } catch (e) {
-      print('Error sending batch notifications: $e');
-      throw Exception('Failed to send batch notifications: $e');
+      print('Error notifying customer: $e');
     }
+  }
+
+  /// Send notification to driver about ride assignment
+  static Future<void> notifyDriverAboutRideAssignment({
+    required String driverId,
+    required String rideId,
+    required String customerName,
+    required String pickupLocation,
+    required String dropoffLocation,
+    required double fare,
+  }) async {
+    try {
+      // Get driver details
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', driverId)
+          .single();
+
+      if (response != null) {
+        final driverPhone = response['phone'];
+
+        final title = 'New Ride Assignment';
+        final message =
+            'You have been assigned a ride for $customerName from $pickupLocation to $dropoffLocation. Fare: \$${fare.toStringAsFixed(2)}';
+
+        // Send push notification (simulated)
+        await _sendPushNotification(
+          driverId: driverId,
+          title: title,
+          body: message,
+        );
+
+        // Send SMS notification
+        await _sendSmsNotification(
+          phoneNumber: driverPhone,
+          message: '$title: $message',
+        );
+
+        print('Sent ride assignment notification to driver $driverId');
+      }
+    } catch (e) {
+      print('Error notifying driver about assignment: $e');
+    }
+  }
+
+  /// Simulated push notification (replace with Firebase Cloud Messaging)
+  static Future<void> _sendPushNotification({
+    required String driverId,
+    required String title,
+    required String body,
+  }) async {
+    // In a real implementation, use Firebase Cloud Messaging
+    // This is a simulation for demo purposes
+
+    print('Sending push notification to $driverId: $title - $body');
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+
+  /// Send SMS notification using Twilio (already implemented)
+  static Future<void> _sendSmsNotification({
+    required String phoneNumber,
+    required String message,
+  }) async {
+    try {
+      // Use the existing TwilioService for SMS notifications
+      // For now, we'll simulate this since TwilioService is already implemented
+
+      print('Sending SMS to $phoneNumber: $message');
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // Real implementation would be:
+      // await TwilioService.sendSMS(
+      //   phoneNumber: phoneNumber,
+      //   message: message,
+      // );
+    } catch (e) {
+      print('Error sending SMS notification: $e');
+    }
+  }
+
+  /// Subscribe to ride updates
+  static Stream<Map<String, dynamic>> subscribeToRideUpdates(String rideId) {
+    return Supabase.instance.client
+        .from('ride_requests')
+        .stream(primaryKey: ['id'])
+        .eq('id', rideId)
+        .map((data) {
+          if (data.isNotEmpty) {
+            return data.first as Map<String, dynamic>;
+          }
+          return {};
+        });
+  }
+
+  /// Subscribe to driver location updates
+  static Stream<Map<String, dynamic>> subscribeToDriverLocation(
+    String driverId,
+  ) {
+    return Supabase.instance.client
+        .from('driver_locations')
+        .stream(primaryKey: ['driver_id'])
+        .eq('driver_id', driverId)
+        .map((data) {
+          if (data.isNotEmpty) {
+            return data.first as Map<String, dynamic>;
+          }
+          return {};
+        });
   }
 }

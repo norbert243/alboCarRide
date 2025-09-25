@@ -1,256 +1,180 @@
-import 'dart:async';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 
-/// Basic location service for driver tracking
-/// Note: This is a simplified version that will be enhanced with geolocator
 class LocationService {
-  final SupabaseClient _client = Supabase.instance.client;
-  Timer? _locationTimer;
-  bool _isTracking = false;
-  String? _currentDriverId;
+  /// Get place suggestions for autocomplete
+  static Future<List<Map<String, dynamic>>> getPlaceSuggestions(
+    String query,
+  ) async {
+    if (query.isEmpty) return [];
 
-  /// Start tracking driver location (simulated for now)
-  Future<void> startTracking(String driverId) async {
     try {
-      if (_isTracking) {
-        await stopTracking();
-      }
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=${ApiConfig.googleMapsApiKey}',
+        ),
+      );
 
-      _currentDriverId = driverId;
-      _isTracking = true;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final predictions = data['predictions'] as List?;
 
-      // Simulate location updates every 30 seconds
-      _locationTimer = Timer.periodic(const Duration(seconds: 30), (
-        timer,
-      ) async {
-        if (_isTracking && _currentDriverId != null) {
-          await _simulateLocationUpdate(_currentDriverId!);
+        if (predictions != null) {
+          return predictions.map((prediction) {
+            return {
+              'placeId': prediction['place_id'],
+              'description': prediction['description'],
+              'mainText':
+                  prediction['structured_formatting']?['main_text'] ??
+                  prediction['description'],
+              'secondaryText':
+                  prediction['structured_formatting']?['secondary_text'] ?? '',
+            };
+          }).toList();
         }
-      });
-
-      print('Location tracking started for driver: $driverId');
+      }
     } catch (e) {
-      print('Error starting location tracking: $e');
-      throw Exception('Failed to start location tracking: $e');
+      print('Error getting place suggestions: $e');
     }
+
+    return [];
   }
 
-  /// Stop tracking driver location
-  Future<void> stopTracking() async {
+  /// Get place details by place ID
+  static Future<Map<String, dynamic>?> getPlaceDetails(String placeId) async {
     try {
-      _isTracking = false;
-      _currentDriverId = null;
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConfig.placesDetailsEndpoint}?place_id=$placeId&key=${ApiConfig.googleMapsApiKey}',
+        ),
+      );
 
-      _locationTimer?.cancel();
-      _locationTimer = null;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final result = data['result'];
 
-      print('Location tracking stopped');
+        if (result != null) {
+          final geometry = result['geometry'];
+          final location = geometry?['location'];
+
+          return {
+            'address': result['formatted_address'],
+            'latitude': location?['lat'],
+            'longitude': location?['lng'],
+            'name': result['name'],
+          };
+        }
+      }
     } catch (e) {
-      print('Error stopping location tracking: $e');
+      print('Error getting place details: $e');
     }
+
+    return null;
   }
 
-  /// Simulate location update (placeholder for real GPS)
-  Future<void> _simulateLocationUpdate(String driverId) async {
-    try {
-      // For now, we'll just update with a placeholder location
-      // In production, this should use real GPS coordinates
-      final simulatedLat = 34.0522; // Example: Los Angeles
-      final simulatedLon = -118.2437;
-
-      // Update driver_locations table
-      await _client.from('driver_locations').upsert({
-        'driver_id': driverId,
-        'latitude': simulatedLat,
-        'longitude': simulatedLon,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-
-      // Also update drivers table with current location
-      await _client
-          .from('drivers')
-          .update({
-            'current_latitude': simulatedLat,
-            'current_longitude': simulatedLon,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', driverId);
-
-      print('Location updated (simulated): $simulatedLat, $simulatedLon');
-    } catch (e) {
-      print('Error updating driver location: $e');
-    }
-  }
-
-  /// Update driver location with provided coordinates
-  Future<void> updateLocation(
-    String driverId,
-    double latitude,
-    double longitude,
+  /// Calculate distance and duration between two points
+  static Future<Map<String, dynamic>?> calculateRoute(
+    double originLat,
+    double originLng,
+    double destLat,
+    double destLng,
   ) async {
     try {
-      // Update driver_locations table
-      await _client.from('driver_locations').upsert({
-        'driver_id': driverId,
-        'latitude': latitude,
-        'longitude': longitude,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConfig.directionsEndpoint}?'
+          'origin=$originLat,$originLng&'
+          'destination=$destLat,$destLng&'
+          'key=${ApiConfig.googleMapsApiKey}',
+        ),
+      );
 
-      // Also update drivers table with current location
-      await _client
-          .from('drivers')
-          .update({
-            'current_latitude': latitude,
-            'current_longitude': longitude,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', driverId);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final routes = data['routes'] as List?;
 
-      print('Location updated: $latitude, $longitude');
+        if (routes != null && routes.isNotEmpty) {
+          final route = routes.first;
+          final legs = route['legs'] as List?;
+
+          if (legs != null && legs.isNotEmpty) {
+            final leg = legs.first;
+            final distance = leg['distance']?['value']; // in meters
+            final duration = leg['duration']?['value']; // in seconds
+
+            return {
+              'distanceMeters': distance,
+              'distanceMiles': (distance ?? 0) / 1609.34, // convert to miles
+              'durationSeconds': duration,
+              'durationMinutes': (duration ?? 0) / 60, // convert to minutes
+            };
+          }
+        }
+      }
     } catch (e) {
-      print('Error updating driver location: $e');
-      throw Exception('Failed to update location: $e');
+      print('Error calculating route: $e');
     }
+
+    return null;
   }
 
-  /// Get driver's last known location from database
-  Future<Map<String, dynamic>?> getLastKnownLocation(String driverId) async {
+  /// Geocode an address to get coordinates
+  static Future<Map<String, dynamic>?> geocodeAddress(String address) async {
     try {
-      final response = await _client
-          .from('driver_locations')
-          .select()
-          .eq('driver_id', driverId)
-          .order('updated_at', ascending: false)
-          .limit(1)
-          .single()
-          .catchError((_) => null);
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=${ApiConfig.googleMapsApiKey}',
+        ),
+      );
 
-      return response;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = data['results'] as List?;
+
+        if (results != null && results.isNotEmpty) {
+          final result = results.first;
+          final geometry = result['geometry'];
+          final location = geometry?['location'];
+
+          return {
+            'address': result['formatted_address'],
+            'latitude': location?['lat'],
+            'longitude': location?['lng'],
+          };
+        }
+      }
     } catch (e) {
-      print('Error getting last known location: $e');
-      return null;
+      print('Error geocoding address: $e');
     }
+
+    return null;
   }
 
-  /// Calculate distance between two coordinates in meters (Haversine formula)
-  double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const earthRadius = 6371000; // meters
-
-    final dLat = _degreesToRadians(lat2 - lat1);
-    final dLon = _degreesToRadians(lon2 - lon1);
-
-    final a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(_degreesToRadians(lat1)) *
-            Math.cos(_degreesToRadians(lat2)) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-
-    final c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  double _degreesToRadians(double degrees) {
-    return degrees * Math.pi / 180;
-  }
-
-  /// Check if driver is within pickup/dropoff radius
-  bool isWithinRadius(
-    double driverLat,
-    double driverLon,
-    double targetLat,
-    double targetLon,
-    double radiusMeters,
-  ) {
-    final distance = calculateDistance(
-      driverLat,
-      driverLon,
-      targetLat,
-      targetLon,
+  /// Estimate fare based on distance and time
+  static Future<double?> estimateFare(
+    double originLat,
+    double originLng,
+    double destLat,
+    double destLng,
+  ) async {
+    final routeInfo = await calculateRoute(
+      originLat,
+      originLng,
+      destLat,
+      destLng,
     );
-    return distance <= radiusMeters;
-  }
 
-  /// Get estimated time of arrival (ETA) in minutes
-  Future<int?> getETA(
-    double startLat,
-    double startLon,
-    double endLat,
-    double endLon,
-  ) async {
-    try {
-      final distance = calculateDistance(startLat, startLon, endLat, endLon);
+    if (routeInfo != null) {
+      final distanceMiles = routeInfo['distanceMiles'] ?? 0;
+      final durationMinutes = routeInfo['durationMinutes'] ?? 0;
 
-      // Assume average speed of 30 km/h (8.33 m/s) in city traffic
-      const averageSpeedMps = 8.33;
-      final etaSeconds = distance / averageSpeedMps;
-      final etaMinutes = (etaSeconds / 60).ceil();
-
-      return etaMinutes > 0 ? etaMinutes : 1; // Minimum 1 minute
-    } catch (e) {
-      print('Error calculating ETA: $e');
-      return null;
+      return FareCalculator.calculateFare(
+        distanceMiles,
+        durationMinutes.toInt(),
+      );
     }
-  }
 
-  /// Check if tracking is active
-  bool get isTracking => _isTracking;
-
-  /// Get current driver ID being tracked
-  String? get currentDriverId => _currentDriverId;
-
-  /// Dispose of resources
-  void dispose() {
-    stopTracking();
-  }
-}
-
-/// Math utilities for calculations
-class Math {
-  static double sin(double x) => _sin(x);
-  static double cos(double x) => _cos(x);
-  static double tan(double x) => _tan(x);
-  static double atan2(double y, double x) => _atan2(y, x);
-  static double sqrt(double x) => _sqrt(x);
-  static const double pi = 3.14159265358979323846;
-
-  static double _sin(double x) {
-    // Simple sine approximation
-    return x - (x * x * x) / 6 + (x * x * x * x * x) / 120;
-  }
-
-  static double _cos(double x) {
-    // Simple cosine approximation
-    return 1 - (x * x) / 2 + (x * x * x * x) / 24;
-  }
-
-  static double _tan(double x) => _sin(x) / _cos(x);
-
-  static double _atan2(double y, double x) {
-    // Simple atan2 approximation
-    if (x > 0) return _atan(y / x);
-    if (x < 0 && y >= 0) return _atan(y / x) + pi;
-    if (x < 0 && y < 0) return _atan(y / x) - pi;
-    if (x == 0 && y > 0) return pi / 2;
-    if (x == 0 && y < 0) return -pi / 2;
-    return 0;
-  }
-
-  static double _atan(double x) {
-    // Simple arctangent approximation
-    return x - (x * x * x) / 3 + (x * x * x * x * x) / 5;
-  }
-
-  static double _sqrt(double x) {
-    // Simple square root approximation (Newton's method)
-    if (x < 0) return 0;
-    if (x == 0) return 0;
-
-    double guess = x / 2;
-    for (int i = 0; i < 10; i++) {
-      guess = (guess + x / guess) / 2;
-    }
-    return guess;
+    return null;
   }
 }

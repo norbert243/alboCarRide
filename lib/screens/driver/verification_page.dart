@@ -150,11 +150,7 @@ class _VerificationPageState extends State<VerificationPage> {
 
       // Navigate to waiting for review page
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(
-        currentContext,
-        '/waiting-review',
-        (route) => false,
-      );
+      Navigator.pushNamed(currentContext, '/waiting-review');
     } catch (e) {
       if (mounted) {
         AuthErrorHandler.handleAuthError(
@@ -240,6 +236,10 @@ class _VerificationPageState extends State<VerificationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text('Driver Verification'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,

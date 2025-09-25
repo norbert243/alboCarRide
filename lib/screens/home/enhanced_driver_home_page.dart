@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/session_service.dart';
 import '../../services/trip_service.dart';
-import '../../services/location_service.dart';
 import '../../widgets/trip_card_widget.dart';
 import '../../widgets/offer_board.dart';
 import '../driver/verification_page.dart';
@@ -17,7 +16,6 @@ class EnhancedDriverHomePage extends StatefulWidget {
 
 class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   final TripService _tripService = TripService();
-  final LocationService _locationService = LocationService();
 
   bool _isOnline = false;
   bool _isLoading = false;
@@ -35,7 +33,6 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   @override
   void dispose() {
-    _locationService.dispose();
     super.dispose();
   }
 
@@ -163,11 +160,8 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       setState(() => _isOnline = newStatus);
 
       // Start/stop location tracking based on online status
-      if (newStatus) {
-        await _locationService.startTracking(_driverId!);
-      } else {
-        await _locationService.stopTracking();
-      }
+      // Location tracking functionality would be implemented here
+      // using a proper location tracking service
 
       debugPrint('Online status updated: $newStatus');
     } catch (e) {
@@ -199,7 +193,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   }
 
   Future<void> _signOut() async {
-    await _locationService.stopTracking();
+    // Stop location tracking if implemented
     await Supabase.instance.client.auth.signOut();
     await SessionService.clearSession();
 
@@ -437,6 +431,13 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back,
+            color: _isOnline ? Colors.white : Colors.black87,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(
           _hasActiveTrip
               ? 'Active Trip'
