@@ -132,8 +132,12 @@ class CustomToast {
 
   static void _removeCurrentToast(BuildContext context) {
     final currentEntry = _currentEntries[context];
-    if (currentEntry != null && currentEntry.mounted) {
-      currentEntry.remove();
+    if (currentEntry != null) {
+      try {
+        currentEntry.remove();
+      } catch (e) {
+        // Overlay might already be removed, ignore the error
+      }
       _currentEntries.remove(context);
     }
   }

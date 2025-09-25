@@ -118,7 +118,7 @@ class MyApp extends StatelessWidget {
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
         '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
-        '/customer-home': (context) => const CustomerHomePage(),
+        '/customer_home': (context) => const CustomerHomePage(),
       },
     );
   }

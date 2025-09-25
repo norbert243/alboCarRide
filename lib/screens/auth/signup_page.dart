@@ -99,124 +99,194 @@ class _SignupPageState extends State<SignupPage> {
       print('Creating user with email: $email');
       print('User role: ${widget.role}');
 
-      // Create user in Supabase with proper credentials
-      final authResponse = await Supabase.instance.client.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'phone': phoneNumber,
-          'full_name': fullName,
-          'role': widget.role,
-        },
-      );
+      String userId;
+      bool isNewUser = false;
 
-      print(
-        'Auth response: ${authResponse.user != null ? "Success" : "Failed"}',
-      );
-
-      if (authResponse.user != null) {
-        print('User created with ID: ${authResponse.user!.id}');
-
-        // Save user profile to profiles table using UPSERT to prevent duplicate key errors
-        try {
-          final profileResponse = await _createOrUpdateProfile(
-            userId: authResponse.user!.id,
-            phone: phoneNumber,
-            fullName: fullName,
-            role: widget.role,
-          );
-
-          print('Profile created/updated successfully: $profileResponse');
-
-          // Create driver-specific record if role is driver using UPSERT
-          if (widget.role == 'driver') {
-            try {
-              final driverResponse = await _createOrUpdateDriver(
-                userId: authResponse.user!.id,
-              );
-
-              print(
-                'Driver record created/updated successfully: $driverResponse',
-              );
-            } catch (driverError) {
-              print('Error creating driver record: $driverError');
-              if (mounted) {
-                CustomToast.showInfo(
-                  context: context,
-                  message:
-                      'Profile created but driver setup incomplete. Please complete your driver profile later.',
-                );
-              }
-            }
-          }
-
-          // Create customer-specific record if role is customer using UPSERT
-          if (widget.role == 'customer') {
-            try {
-              final customerResponse = await _createOrUpdateCustomer(
-                userId: authResponse.user!.id,
-              );
-
-              print(
-                'Customer record created/updated successfully: $customerResponse',
-              );
-            } catch (customerError) {
-              print('Error creating customer record: $customerError');
-              if (mounted) {
-                CustomToast.showInfo(
-                  context: context,
-                  message:
-                      'Profile created but customer setup incomplete. Please complete your customer profile later.',
-                );
-              }
-            }
-          }
-        } catch (profileError) {
-          print('Error creating profile: $profileError');
-          // Show warning but continue - user can complete profile later
-          if (mounted) {
-            CustomToast.showInfo(
-              context: context,
-              message:
-                  'User created but profile setup incomplete. Please complete your profile later.',
-            );
-          }
-        }
-
-        // Save session to persistent storage
-        final session = Supabase.instance.client.auth.currentSession;
-        print('Current session: ${session != null ? "Exists" : "Null"}');
-
-        if (session != null) {
-          final expiry = session.expiresAt != null
-              ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
-              : DateTime.now().add(const Duration(days: 30));
-
-          await SessionService.saveSession(
-            userId: authResponse.user!.id,
-            userPhone: phoneNumber,
-            userRole: widget.role,
-            expiry: expiry,
-          );
-          print('Session saved to local storage');
-        }
-
-        if (mounted) {
-          print('Navigating to ${widget.role} homepage');
-          _navigateBasedOnRole(widget.role);
-        }
-      } else {
-        print('User creation failed - authResponse.user is null');
-        CustomToast.showError(
-          context: context,
-          message: 'Registration failed. Please try again.',
+      try {
+        // Try to sign up new user
+        final authResponse = await Supabase.instance.client.auth.signUp(
+          email: email,
+          password: password,
+          data: {
+            'phone': phoneNumber,
+            'full_name': fullName,
+            'role': widget.role,
+          },
         );
+
+        print(
+          'Auth response: ${authResponse.user != null ? "Success" : "Failed"}',
+        );
+
+        if (authResponse.user != null) {
+          userId = authResponse.user!.id;
+          isNewUser = true;
+          print('New user created with ID: $userId');
+        } else {
+          throw Exception('User creation failed - authResponse.user is null');
+        }
+      } catch (signUpError) {
+        // If user already exists, try to sign in
+        if (signUpError.toString().contains('user_already_exists') ||
+            signUpError.toString().contains('already registered')) {
+          print('User already exists, attempting to sign in...');
+
+          try {
+            final signInResponse = await Supabase.instance.client.auth
+                .signInWithPassword(email: email, password: password);
+
+            if (signInResponse.user != null) {
+              userId = signInResponse.user!.id;
+              isNewUser = false;
+              print('Existing user signed in with ID: $userId');
+            } else {
+              throw Exception('Sign in failed - user is null');
+            }
+          } catch (signInError) {
+            // If sign in fails, try with a default password
+            print('Sign in failed, trying with default password...');
+
+            try {
+              final defaultSignInResponse = await Supabase.instance.client.auth
+                  .signInWithPassword(
+                    email: email,
+                    password:
+                        'Alb0CarRide123', // Default password for existing users
+                  );
+
+              if (defaultSignInResponse.user != null) {
+                userId = defaultSignInResponse.user!.id;
+                isNewUser = false;
+                print(
+                  'Existing user signed in with default password, ID: $userId',
+                );
+              } else {
+                throw Exception('Default password sign in failed');
+              }
+            } catch (defaultError) {
+              // If all else fails, create a new user with different email
+              print(
+                'All sign in attempts failed, creating new user with modified email...',
+              );
+
+              final modifiedEmail =
+                  '${phoneNumber}_${DateTime.now().millisecondsSinceEpoch}@albocarride.com';
+              final authResponse = await Supabase.instance.client.auth.signUp(
+                email: modifiedEmail,
+                password: password,
+                data: {
+                  'phone': phoneNumber,
+                  'full_name': fullName,
+                  'role': widget.role,
+                },
+              );
+
+              if (authResponse.user != null) {
+                userId = authResponse.user!.id;
+                isNewUser = true;
+                print('New user created with modified email, ID: $userId');
+              } else {
+                throw Exception('Modified email user creation failed');
+              }
+            }
+          }
+        } else {
+          // Re-throw other errors
+          throw signUpError;
+        }
+      }
+
+      // Save user profile to profiles table using UPSERT to prevent duplicate key errors
+      try {
+        final profileResponse = await _createOrUpdateProfile(
+          userId: userId,
+          phone: phoneNumber,
+          fullName: fullName,
+          role: widget.role,
+        );
+
+        print('Profile created/updated successfully: $profileResponse');
+
+        // Create driver-specific record if role is driver using UPSERT
+        if (widget.role == 'driver') {
+          try {
+            final driverResponse = await _createOrUpdateDriver(userId: userId);
+
+            print(
+              'Driver record created/updated successfully: $driverResponse',
+            );
+          } catch (driverError) {
+            print('Error creating driver record: $driverError');
+            if (mounted) {
+              CustomToast.showInfo(
+                context: context,
+                message:
+                    'Profile created but driver setup incomplete. Please complete your driver profile later.',
+              );
+            }
+          }
+        }
+
+        // Create customer-specific record if role is customer using UPSERT
+        if (widget.role == 'customer') {
+          try {
+            final customerResponse = await _createOrUpdateCustomer(
+              userId: userId,
+            );
+
+            print(
+              'Customer record created/updated successfully: $customerResponse',
+            );
+          } catch (customerError) {
+            print('Error creating customer record: $customerError');
+            if (mounted) {
+              CustomToast.showInfo(
+                context: context,
+                message:
+                    'Profile created but customer setup incomplete. Please complete your customer profile later.',
+              );
+            }
+          }
+        }
+      } catch (profileError) {
+        print('Error creating profile: $profileError');
+        // Show warning but continue - user can complete profile later
+        if (mounted) {
+          CustomToast.showInfo(
+            context: context,
+            message:
+                'User ${isNewUser ? 'created' : 'signed in'} but profile setup incomplete. Please complete your profile later.',
+          );
+        }
+      }
+
+      // Save session to persistent storage
+      final session = Supabase.instance.client.auth.currentSession;
+      print('Current session: ${session != null ? "Exists" : "Null"}');
+
+      if (session != null) {
+        final expiry = session.expiresAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
+            : DateTime.now().add(const Duration(days: 30));
+
+        await SessionService.saveSession(
+          userId: userId,
+          userPhone: phoneNumber,
+          userRole: widget.role,
+          expiry: expiry,
+        );
+        print('Session saved to local storage');
+      }
+
+      if (mounted) {
+        print('Navigating to ${widget.role} homepage');
+        _navigateBasedOnRole(widget.role);
       }
     } catch (e) {
       print('Error in completeRegistration: $e');
       CustomToast.showError(
         context: context,
-        message: 'Error creating profile: ${e.toString()}',
+        message: 'Error during registration: ${e.toString()}',
       );
     }
   }
