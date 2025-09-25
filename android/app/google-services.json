@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "167231435552",
+    "project_id": "albo-car-ride",
+    "storage_bucket": "albo-car-ride.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:167231435552:android:bdaa3b35233929ebc99d45",
+        "android_client_info": {
+          "package_name": "com.example.albocarride"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVL0X5qJptdAB3QHPR_goILFwpEmznhWE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -27,8 +27,8 @@ import 'dart:math';
 
 class ApiConfig {
   // Google Maps Platform Configuration
-  static const String googleMapsApiKey =
-      'AIzaSyCUtXqWq5uvqUhtMuHgo-ZFVwjNeiTyPmg';
+  static String get googleMapsApiKey =>
+      const String.fromEnvironment('GOOGLE_MAPS_API_KEY', defaultValue: '');
   static const String googlePlacesBaseUrl =
       'https://maps.googleapis.com/maps/api/place';
   static const String googleDirectionsBaseUrl =
@@ -37,18 +37,24 @@ class ApiConfig {
       'https://maps.googleapis.com/maps/api/geocode';
 
   // Mapbox Configuration (Alternative)
-  static const String mapboxAccessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+  static String get mapboxAccessToken =>
+      const String.fromEnvironment('MAPBOX_ACCESS_TOKEN', defaultValue: '');
   static const String mapboxBaseUrl = 'https://api.mapbox.com';
 
   // Stripe Configuration
-  static const String stripePublishableKey = 'YOUR_STRIPE_PUBLISHABLE_KEY';
+  static String get stripePublishableKey =>
+      const String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
   static const String stripeSecretKey =
       'YOUR_STRIPE_SECRET_KEY'; // Server-side only
   static const String stripeBaseUrl = 'https://api.stripe.com/v1';
 
   // Firebase Configuration
-  static const String firebaseProjectId = 'YOUR_FIREBASE_PROJECT_ID';
-  static const String firebaseMessagingSenderId = 'YOUR_FIREBASE_SENDER_ID';
+  static String get firebaseProjectId =>
+      const String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: '');
+  static String get firebaseMessagingSenderId => const String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+    defaultValue: '',
+  );
 
   // Base fare calculation (in cents)
   static const int baseFare = 500; // $5.00

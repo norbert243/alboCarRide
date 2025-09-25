@@ -35,6 +35,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Firebase Core and Messaging
+  firebase_core: ^3.4.1
+  firebase_messaging: ^15.1.1
+
   # Supabase Flutter SDK for authentication and database
   supabase_flutter: ^2.10.1
 
