@@ -155,7 +155,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _navigateToCustomerHome() {
     Navigator.pushNamedAndRemoveUntil(
       context,
-      '/customer-home',
+      '/customer_home',
       (route) => false,
     );
   }

@@ -106,7 +106,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const CustomerHomePage(),
+      home: const AuthWrapper(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),

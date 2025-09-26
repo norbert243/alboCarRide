@@ -49,10 +49,15 @@ class DocumentUploadService {
       final fileName =
           customFileName ?? _generateFileName(userId, documentType, file.name);
 
-      // Upload to Supabase storage
-      final storagePath = '${documentType.name}/$userId/$fileName';
+      // Upload to Supabase storage - IMPORTANT: Path structure must match RLS policies
+      // RLS policies expect: user_id/document_type/filename
+      final storagePath = '$userId/${documentType.name}/$fileName';
 
-      await _supabase.storage
+      print('Attempting to upload document to: $storagePath');
+      print('File size: ${compressedBytes.length} bytes');
+      print('MIME type: ${_getMimeType(file.name)}');
+
+      final uploadResponse = await _supabase.storage
           .from(_storageBucket)
           .uploadBinary(
             storagePath,
@@ -63,6 +68,8 @@ class DocumentUploadService {
             ),
           );
 
+      print('Upload response: $uploadResponse');
+
       // Get public URL
       final publicUrl = _supabase.storage
           .from(_storageBucket)
@@ -70,8 +77,31 @@ class DocumentUploadService {
 
       return publicUrl;
     } catch (e) {
+      print('Document upload error: $e');
+      print('Error type: ${e.runtimeType}');
+
       if (e is StorageException) {
+        print('StorageException details:');
+        print('  Message: ${e.message}');
+        print('  Status code: ${e.statusCode}');
+
+        if (e.message?.contains('bucket') ?? false) {
+          throw Exception(
+            'Storage bucket not found. Please ensure the "driver-documents" bucket is created in Supabase Storage. Error: ${e.message}',
+          );
+        } else if (e.message?.contains('permission') ?? false) {
+          throw Exception(
+            'Permission denied. Please check if the user is authenticated and has proper permissions. Error: ${e.message}',
+          );
+        } else if (e.message?.contains('size') ?? false) {
+          throw Exception(
+            'File size exceeds limit. Please ensure files are under 5MB. Error: ${e.message}',
+          );
+        }
         throw Exception('Storage upload failed: ${e.message}');
+      } else if (e is Exception) {
+        print('General Exception: $e');
+        throw Exception('Document upload failed: $e');
       }
       rethrow;
     }
@@ -103,6 +133,11 @@ class DocumentUploadService {
         customFileName: customFileName,
       );
     } catch (e) {
+      if (e.toString().contains('bucket not found')) {
+        throw Exception(
+          'Storage configuration error: Document upload bucket not found. Please contact support.',
+        );
+      }
       throw Exception('Failed to pick and upload document: $e');
     }
   }
