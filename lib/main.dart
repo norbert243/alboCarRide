@@ -13,6 +13,8 @@ import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
+import 'package:albocarride/screens/debug/session_debug_page.dart';
+import 'package:albocarride/services/session_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +26,9 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // Initialize session service
+  SessionService().initialize();
 
   runApp(const MyApp());
 }
@@ -128,6 +133,7 @@ class MyApp extends StatelessWidget {
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),
+        '/session-debug': (context) => const SessionDebugPage(),
       },
     );
   }

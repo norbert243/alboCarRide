@@ -29,7 +29,7 @@ class _OfferBoardState extends State<OfferBoard> {
 
     String? driverId;
     try {
-      driverId = await SessionService.getUserId();
+      driverId = await SessionService.getUserIdStatic();
     } catch (e) {
       driverId = null;
     }
@@ -284,7 +284,7 @@ class _OfferBoardState extends State<OfferBoard> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<String?>(
-      future: SessionService.getUserId(),
+      future: SessionService.getUserIdStatic(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

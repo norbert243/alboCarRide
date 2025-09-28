@@ -1,224 +1,384 @@
--- AlboCarRide Database Schema
--- This schema includes all tables needed for the ride-sharing application
+-- ============================
+-- PROFILES & USERS
+-- ============================
 
--- Profiles table (user profiles with role information - references auth.users directly)
-CREATE TABLE profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name VARCHAR(255) NOT NULL,
-    phone VARCHAR(20) UNIQUE,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('customer', 'driver')),
-    avatar_url TEXT,
-    verification_status VARCHAR(20) CHECK (verification_status IN ('pending', 'approved', 'rejected')),
-    verification_submitted_at TIMESTAMP WITH TIME ZONE,
-    is_online BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  email varchar NOT NULL UNIQUE,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
 
--- Driver-specific information
-CREATE TABLE drivers (
-    id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-    license_number VARCHAR(100),
-    license_expiry DATE,
-    vehicle_type VARCHAR(20) CHECK (vehicle_type IN ('car', 'motorcycle')),
-    vehicle_make VARCHAR(100),
-    vehicle_model VARCHAR(100),
-    vehicle_year INTEGER,
-    vehicle_color VARCHAR(50),
-    license_plate VARCHAR(20),
-    current_latitude DECIMAL(10, 8),
-    current_longitude DECIMAL(10, 8),
-    rating DECIMAL(3, 2) DEFAULT 0.0,
-    total_rides INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  full_name varchar NOT NULL,
+  phone varchar,
+  role varchar NOT NULL CHECK (role IN ('customer','driver')),
+  avatar_url text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  car_model text,
+  license_plate text,
+  is_online boolean DEFAULT false,
+  rating numeric DEFAULT 5.0,
+  total_ratings int DEFAULT 0,
+  verification_status text CHECK (verification_status IN ('pending','approved','rejected')),
+  verification_submitted_at timestamptz,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
 
--- Customer-specific information
-CREATE TABLE customers (
-    id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-    preferred_payment_method VARCHAR(50) DEFAULT 'cash',
-    rating DECIMAL(3, 2) DEFAULT 0.0,
-    total_rides INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ============================
+-- CUSTOMERS & DRIVERS
+-- ============================
+
+CREATE TABLE public.customers (
+  id uuid NOT NULL,
+  preferred_payment_method varchar DEFAULT 'cash',
+  rating numeric DEFAULT 0.0,
+  total_rides int DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT customers_pkey PRIMARY KEY (id)
 );
 
--- Ride requests table
-CREATE TABLE ride_requests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
-    pickup_address TEXT NOT NULL,
-    pickup_latitude DECIMAL(10, 8) NOT NULL,
-    pickup_longitude DECIMAL(10, 8) NOT NULL,
-    dropoff_address TEXT NOT NULL,
-    dropoff_latitude DECIMAL(10, 8) NOT NULL,
-    dropoff_longitude DECIMAL(10, 8) NOT NULL,
-    estimated_distance DECIMAL(8, 2),
-    estimated_duration INTEGER,
-    estimated_price DECIMAL(10, 2),
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'driver_assigned', 'picked_up', 'in_progress', 'completed', 'cancelled')),
-    requested_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    accepted_at TIMESTAMP WITH TIME ZONE,
-    picked_up_at TIMESTAMP WITH TIME ZONE,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    cancelled_at TIMESTAMP WITH TIME ZONE,
-    cancellation_reason TEXT
+CREATE TABLE public.drivers (
+  id uuid NOT NULL,
+  license_number varchar,
+  license_expiry date,
+  vehicle_make varchar,
+  vehicle_model varchar,
+  vehicle_year int,
+  vehicle_color varchar,
+  license_plate varchar,
+  is_online boolean DEFAULT false,
+  current_latitude numeric,
+  current_longitude numeric,
+  rating numeric DEFAULT 0.0,
+  total_rides int DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  vehicle_type text CHECK (vehicle_type IN ('car','motorcycle')),
+  CONSTRAINT drivers_pkey PRIMARY KEY (id)
 );
 
--- Rides table (completed/accepted rides)
-CREATE TABLE rides (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ride_request_id UUID REFERENCES ride_requests(id) ON DELETE CASCADE,
-    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
-    driver_id UUID REFERENCES drivers(id) ON DELETE CASCADE,
-    pickup_address TEXT NOT NULL,
-    pickup_latitude DECIMAL(10, 8) NOT NULL,
-    pickup_longitude DECIMAL(10, 8) NOT NULL,
-    dropoff_address TEXT NOT NULL,
-    dropoff_latitude DECIMAL(10, 8) NOT NULL,
-    dropoff_longitude DECIMAL(10, 8) NOT NULL,
-    actual_distance DECIMAL(8, 2),
-    actual_duration INTEGER,
-    base_fare DECIMAL(10, 2) NOT NULL,
-    distance_fare DECIMAL(10, 2),
-    time_fare DECIMAL(10, 2),
-    surge_multiplier DECIMAL(4, 2) DEFAULT 1.0,
-    total_price DECIMAL(10, 2) NOT NULL,
-    status VARCHAR(20) NOT NULL CHECK (status IN ('scheduled', 'picked_up', 'in_progress', 'completed', 'cancelled')),
-    scheduled_for TIMESTAMP WITH TIME ZONE,
-    started_at TIMESTAMP WITH TIME ZONE,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    cancelled_at TIMESTAMP WITH TIME ZONE,
-    cancellation_reason TEXT,
-    customer_rating INTEGER CHECK (customer_rating BETWEEN 1 AND 5),
-    driver_rating INTEGER CHECK (driver_rating BETWEEN 1 AND 5),
-    customer_feedback TEXT,
-    driver_feedback TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ============================
+-- DRIVER DOCUMENTS & LOCATIONS
+-- ============================
+
+CREATE TABLE public.driver_documents (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  driver_id uuid NOT NULL,
+  document_type varchar NOT NULL CHECK (
+    document_type IN (
+      'driver_license','id_card','insurance',
+      'vehicle_photo','plate_photo','driver_photo'
+    )
+  ),
+  document_url text NOT NULL,
+  status varchar DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  rejection_reason text,
+  uploaded_at timestamptz DEFAULT now(),
+  reviewed_at timestamptz,
+  reviewer_notes text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT driver_documents_pkey PRIMARY KEY (id),
+  CONSTRAINT driver_documents_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.drivers(id)
 );
 
--- Payments table
-CREATE TABLE payments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ride_id UUID REFERENCES rides(id) ON DELETE CASCADE,
-    customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
-    driver_id UUID REFERENCES drivers(id) ON DELETE CASCADE,
-    amount DECIMAL(10, 2) NOT NULL,
-    payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('cash', 'card', 'mobile_money')),
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
-    transaction_id VARCHAR(255),
-    processed_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.driver_locations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  driver_id uuid,
+  lat double precision NOT NULL,
+  lng double precision NOT NULL,
+  updated_at timestamp DEFAULT now(),
+  speed numeric,
+  accuracy numeric,
+  CONSTRAINT driver_locations_pkey PRIMARY KEY (id),
+  CONSTRAINT driver_locations_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.drivers(id)
 );
 
--- Driver earnings table
-CREATE TABLE driver_earnings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    driver_id UUID REFERENCES drivers(id) ON DELETE CASCADE,
-    ride_id UUID REFERENCES rides(id) ON DELETE CASCADE,
-    amount DECIMAL(10, 2) NOT NULL,
-    commission DECIMAL(10, 2) NOT NULL,
-    net_earnings DECIMAL(10, 2) NOT NULL,
-    payment_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'processing')),
-    paid_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ============================
+-- RIDE REQUESTS & OFFERS
+-- ============================
+
+CREATE TABLE public.ride_requests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  rider_id uuid NOT NULL,
+  pickup_address text NOT NULL,
+  dropoff_address text NOT NULL,
+  proposed_price numeric NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','cancelled','expired')),
+  created_at timestamptz DEFAULT now(),
+  expires_at timestamptz DEFAULT (now() + interval '15 minutes'),
+  notes text,
+  CONSTRAINT ride_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT ride_requests_rider_id_fkey FOREIGN KEY (rider_id) REFERENCES public.profiles(id)
 );
 
--- Ride locations tracking (for real-time tracking)
-CREATE TABLE ride_locations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ride_id UUID REFERENCES rides(id) ON DELETE CASCADE,
-    latitude DECIMAL(10, 8) NOT NULL,
-    longitude DECIMAL(10, 8) NOT NULL,
-    speed DECIMAL(6, 2),
-    heading DECIMAL(5, 2),
-    accuracy DECIMAL(6, 2),
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.ride_offers (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  driver_id uuid NOT NULL,
+  request_id uuid NOT NULL,
+  offer_price numeric NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','cancelled')),
+  created_at timestamptz DEFAULT now(),
+  expires_at timestamptz DEFAULT (now() + interval '10 minutes'),
+  CONSTRAINT ride_offers_pkey PRIMARY KEY (id),
+  CONSTRAINT ride_offers_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.profiles(id),
+  CONSTRAINT ride_offers_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.ride_requests(id)
 );
 
--- Driver documents table
-CREATE TABLE driver_documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    document_type VARCHAR(50) NOT NULL CHECK (document_type IN ('driver_license', 'vehicle_registration', 'profile_photo', 'vehicle_photo')),
-    document_url TEXT NOT NULL,
-    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    verification_status VARCHAR(20) DEFAULT 'pending' CHECK (verification_status IN ('pending', 'approved', 'rejected')),
-    reviewed_at TIMESTAMP WITH TIME ZONE,
-    reviewer_notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- ============================
+-- RIDES & TRIPS
+-- ============================
+
+CREATE TABLE public.rides (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  ride_request_id uuid,
+  customer_id uuid,
+  driver_id uuid,
+  pickup_address text NOT NULL,
+  pickup_latitude numeric NOT NULL,
+  pickup_longitude numeric NOT NULL,
+  dropoff_address text NOT NULL,
+  dropoff_latitude numeric NOT NULL,
+  dropoff_longitude numeric NOT NULL,
+  actual_distance numeric,
+  actual_duration int,
+  base_fare numeric NOT NULL,
+  distance_fare numeric,
+  time_fare numeric,
+  surge_multiplier numeric DEFAULT 1.0,
+  total_price numeric NOT NULL,
+  status varchar NOT NULL CHECK (status IN ('scheduled','picked_up','in_progress','completed','cancelled')),
+  scheduled_for timestamptz,
+  started_at timestamptz,
+  completed_at timestamptz,
+  cancelled_at timestamptz,
+  cancellation_reason text,
+  customer_rating int CHECK (customer_rating BETWEEN 1 AND 5),
+  driver_rating int CHECK (driver_rating BETWEEN 1 AND 5),
+  customer_feedback text,
+  driver_feedback text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT rides_pkey PRIMARY KEY (id),
+  CONSTRAINT rides_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT rides_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.drivers(id)
 );
 
--- Notifications table
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    type VARCHAR(50) NOT NULL CHECK (type IN ('ride_update', 'payment', 'promotion', 'system', 'verification')),
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.trips (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  rider_id uuid NOT NULL,
+  driver_id uuid NOT NULL,
+  request_id uuid NOT NULL,
+  offer_id uuid NOT NULL,
+  start_time timestamptz,
+  end_time timestamptz,
+  final_price numeric,
+  status text NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','in_progress','completed','cancelled')),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  cancellation_reason text,
+  CONSTRAINT trips_pkey PRIMARY KEY (id),
+  CONSTRAINT trips_rider_id_fkey FOREIGN KEY (rider_id) REFERENCES public.profiles(id),
+  CONSTRAINT trips_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.profiles(id),
+  CONSTRAINT trips_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.ride_requests(id),
+  CONSTRAINT trips_offer_id_fkey FOREIGN KEY (offer_id) REFERENCES public.ride_offers(id)
 );
 
--- Indexes for better performance
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_drivers_online ON drivers(is_online);
-CREATE INDEX idx_drivers_location ON drivers(current_latitude, current_longitude);
-CREATE INDEX idx_ride_requests_status ON ride_requests(status);
-CREATE INDEX idx_ride_requests_customer ON ride_requests(customer_id);
-CREATE INDEX idx_rides_status ON rides(status);
-CREATE INDEX idx_rides_customer ON rides(customer_id);
-CREATE INDEX idx_rides_driver ON rides(driver_id);
-CREATE INDEX idx_payments_ride ON payments(ride_id);
-CREATE INDEX idx_payments_status ON payments(status);
-CREATE INDEX idx_ride_locations_ride ON ride_locations(ride_id);
-CREATE INDEX idx_notifications_user ON notifications(user_id);
-CREATE INDEX idx_notifications_read ON notifications(is_read);
+-- ============================
+-- PAYMENTS & EARNINGS
+-- ============================
 
--- Triggers for updated_at timestamps
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+CREATE TABLE public.payments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  ride_id uuid,
+  customer_id uuid,
+  driver_id uuid,
+  amount numeric NOT NULL,
+  payment_method varchar NOT NULL CHECK (payment_method IN ('cash','card','mobile_money')),
+  status varchar NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','completed','failed','refunded')),
+  transaction_id varchar,
+  processed_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT payments_pkey PRIMARY KEY (id),
+  CONSTRAINT payments_ride_id_fkey FOREIGN KEY (ride_id) REFERENCES public.rides(id),
+  CONSTRAINT payments_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT payments_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.drivers(id)
+);
 
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TABLE public.driver_earnings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  driver_id uuid,
+  ride_id uuid,
+  amount numeric NOT NULL,
+  commission numeric NOT NULL,
+  net_earnings numeric NOT NULL,
+  payment_status varchar NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending','paid','processing')),
+  paid_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  CONSTRAINT driver_earnings_pkey PRIMARY KEY (id),
+  CONSTRAINT driver_earnings_driver_id_fkey FOREIGN KEY (driver_id) REFERENCES public.drivers(id),
+  CONSTRAINT driver_earnings_ride_id_fkey FOREIGN KEY (ride_id) REFERENCES public.rides(id)
+);
 
-CREATE TRIGGER update_drivers_updated_at BEFORE UPDATE ON drivers
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- ============================
+-- LOCATIONS & RATINGS
+-- ============================
 
-CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TABLE public.ride_locations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  ride_id uuid,
+  latitude numeric NOT NULL,
+  longitude numeric NOT NULL,
+  speed numeric,
+  heading numeric,
+  accuracy numeric,
+  recorded_at timestamptz DEFAULT now(),
+  CONSTRAINT ride_locations_pkey PRIMARY KEY (id),
+  CONSTRAINT ride_locations_ride_id_fkey FOREIGN KEY (ride_id) REFERENCES public.rides(id)
+);
 
-CREATE TRIGGER update_rides_updated_at BEFORE UPDATE ON rides
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TABLE public.ratings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  trip_id uuid NOT NULL,
+  rater_id uuid NOT NULL,
+  ratee_id uuid NOT NULL,
+  rating int NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment text,
+  created_at timestamptz DEFAULT now(),
+  CONSTRAINT ratings_pkey PRIMARY KEY (id),
+  CONSTRAINT ratings_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(id),
+  CONSTRAINT ratings_rater_id_fkey FOREIGN KEY (rater_id) REFERENCES public.profiles(id),
+  CONSTRAINT ratings_ratee_id_fkey FOREIGN KEY (ratee_id) REFERENCES public.profiles(id)
+);
 
-CREATE TRIGGER update_payments_updated_at BEFORE UPDATE ON payments
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- ============================
+-- NOTIFICATIONS
+-- ============================
 
-CREATE TRIGGER update_driver_earnings_updated_at BEFORE UPDATE ON driver_earnings
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  title varchar NOT NULL,
+  message text NOT NULL,
+  type varchar NOT NULL CHECK (type IN ('ride_update','payment','promotion','system','verification')),
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  ride_id uuid,
+  trip_id uuid,
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT notifications_ride_id_fkey FOREIGN KEY (ride_id) REFERENCES public.rides(id),
+  CONSTRAINT notifications_trip_id_fkey FOREIGN KEY (trip_id) REFERENCES public.trips(id)
+);
 
-CREATE TRIGGER update_driver_documents_updated_at BEFORE UPDATE ON driver_documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- ============================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================
 
--- Insert sample data (optional)
--- Note: These sample profiles would require corresponding auth.users entries
--- INSERT INTO profiles (id, full_name, phone, role, verification_status) VALUES
--- ('00000000-0000-0000-0000-000000000001', 'System Admin', '+1234567890', 'customer', 'approved'),
--- ('00000000-0000-0000-0000-000000000002', 'John Driver', '+1234567891', 'driver', 'approved'),
--- ('00000000-0000-0000-0000-000000000003', 'Sarah Customer', '+1234567892', 'customer', 'approved');
+-- Enable RLS on all tables
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.drivers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ride_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ride_offers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.driver_earnings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ride_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- INSERT INTO drivers (id, license_number, vehicle_type, vehicle_make, vehicle_model, license_plate) VALUES
--- ('00000000-0000-0000-0000-000000000002', 'DRV123456', 'car', 'Toyota', 'Corolla', 'ABC123');
+-- Profiles RLS Policies
+CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
--- INSERT INTO customers (id, preferred_payment_method) VALUES
--- ('00000000-0000-0000-0000-000000000003', 'card');
+-- Driver Documents RLS Policies
+CREATE POLICY "Drivers can view own documents" ON public.driver_documents FOR SELECT USING (auth.uid() = driver_id);
+CREATE POLICY "Drivers can upload own documents" ON public.driver_documents FOR INSERT WITH CHECK (auth.uid() = driver_id);
+CREATE POLICY "Drivers can update own documents" ON public.driver_documents FOR UPDATE USING (auth.uid() = driver_id);
+
+-- Ride Requests RLS Policies
+CREATE POLICY "Users can view own ride requests" ON public.ride_requests FOR SELECT USING (auth.uid() = rider_id);
+CREATE POLICY "Users can create ride requests" ON public.ride_requests FOR INSERT WITH CHECK (auth.uid() = rider_id);
+CREATE POLICY "Users can update own ride requests" ON public.ride_requests FOR UPDATE USING (auth.uid() = rider_id);
+
+-- Notifications RLS Policies
+CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
+
+-- ============================
+-- STORAGE BUCKET CONFIGURATION
+-- ============================
+
+-- Create storage bucket for driver documents (if not exists)
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('driver-documents', 'driver-documents', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS policies for storage bucket
+CREATE POLICY "Drivers can upload own documents" ON storage.objects 
+FOR INSERT WITH CHECK (bucket_id = 'driver-documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Drivers can view own documents" ON storage.objects 
+FOR SELECT USING (bucket_id = 'driver-documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Drivers can update own documents" ON storage.objects 
+FOR UPDATE USING (bucket_id = 'driver-documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY "Drivers can delete own documents" ON storage.objects 
+FOR DELETE USING (bucket_id = 'driver-documents' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ============================
+-- INDEXES FOR PERFORMANCE
+-- ============================
+
+-- Profiles indexes
+CREATE INDEX idx_profiles_role ON public.profiles(role);
+CREATE INDEX idx_profiles_verification_status ON public.profiles(verification_status);
+
+-- Drivers indexes
+CREATE INDEX idx_drivers_online_status ON public.drivers(is_online);
+CREATE INDEX idx_drivers_vehicle_type ON public.drivers(vehicle_type);
+
+-- Ride requests indexes
+CREATE INDEX idx_ride_requests_status ON public.ride_requests(status);
+CREATE INDEX idx_ride_requests_expires_at ON public.ride_requests(expires_at);
+
+-- Rides indexes
+CREATE INDEX idx_rides_status ON public.rides(status);
+CREATE INDEX idx_rides_customer_id ON public.rides(customer_id);
+CREATE INDEX idx_rides_driver_id ON public.rides(driver_id);
+
+-- Driver locations indexes
+CREATE INDEX idx_driver_locations_driver_id ON public.driver_locations(driver_id);
+CREATE INDEX idx_driver_locations_updated_at ON public.driver_locations(updated_at);
+
+-- Notifications indexes
+CREATE INDEX idx_notifications_user_id ON public.notifications(user_id);
+CREATE INDEX idx_notifications_is_read ON public.notifications(is_read);
+
+-- ============================
+-- COMMENTS FOR DOCUMENTATION
+-- ============================
+
+COMMENT ON TABLE public.profiles IS 'User profiles with role-based access control';
+COMMENT ON TABLE public.drivers IS 'Driver-specific information and vehicle details';
+COMMENT ON TABLE public.driver_documents IS 'Driver verification documents and status';
+COMMENT ON TABLE public.ride_requests IS 'Customer ride requests with pricing and status';
+COMMENT ON TABLE public.rides IS 'Completed and active rides with detailed tracking';
+COMMENT ON TABLE public.payments IS 'Payment transactions for completed rides';
+COMMENT ON TABLE public.notifications IS 'User notifications for ride updates and system messages';

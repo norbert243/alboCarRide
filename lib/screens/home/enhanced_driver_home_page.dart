@@ -40,7 +40,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
     setState(() => _isLoading = true);
     try {
       // Get driver ID from session
-      _driverId = await SessionService.getUserId();
+      _driverId = await SessionService.getUserIdStatic();
       if (_driverId == null) {
         _redirectToLogin();
         return;
@@ -78,15 +78,24 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   Future<void> _loadDriverProfile() async {
     try {
-      final response = await Supabase.instance.client
+      // Load profile verification status
+      final profileResponse = await Supabase.instance.client
           .from('profiles')
-          .select('verification_status, drivers(vehicle_type)')
+          .select('verification_status')
+          .eq('id', _driverId!)
+          .single();
+
+      // Load driver vehicle type
+      final driverResponse = await Supabase.instance.client
+          .from('drivers')
+          .select('vehicle_type')
           .eq('id', _driverId!)
           .single();
 
       setState(() {
-        _verificationStatus = response['verification_status'] ?? 'pending';
-        _vehicleType = response['drivers']?['vehicle_type'];
+        _verificationStatus =
+            profileResponse['verification_status'] ?? 'pending';
+        _vehicleType = driverResponse['vehicle_type'];
       });
     } catch (e) {
       debugPrint('Error loading driver profile: $e');
@@ -195,7 +204,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   Future<void> _signOut() async {
     // Stop location tracking if implemented
     await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await SessionService.clearSessionStatic();
 
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(

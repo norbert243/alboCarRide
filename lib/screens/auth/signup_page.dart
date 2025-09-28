@@ -265,17 +265,38 @@ class _SignupPageState extends State<SignupPage> {
       print('Current session: ${session != null ? "Exists" : "Null"}');
 
       if (session != null) {
-        final expiry = session.expiresAt != null
-            ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
-            : DateTime.now().add(const Duration(days: 30));
+        try {
+          final expiry = session.expiresAt != null
+              ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
+              : DateTime.now().add(const Duration(days: 30));
 
-        await SessionService.saveSession(
-          userId: userId,
-          userPhone: phoneNumber,
-          userRole: widget.role,
-          expiry: expiry,
-        );
-        print('Session saved to local storage');
+          await SessionService.saveSessionStatic(
+            userId: userId,
+            userPhone: phoneNumber,
+            userRole: widget.role,
+            expiry: expiry,
+          );
+          print('Session saved to local storage successfully');
+
+          // Verify the session was saved correctly
+          final savedSession = await SessionService.getSessionDataStatic();
+          if (savedSession != null) {
+            print('Session verification successful:');
+            print('  User ID: ${savedSession['userId']}');
+            print('  Phone: ${savedSession['userPhone']}');
+            print('  Role: ${savedSession['userRole']}');
+          } else {
+            print(
+              'WARNING: Session verification failed - session not found after saving',
+            );
+          }
+        } catch (sessionError) {
+          print('Error saving session to local storage: $sessionError');
+          // Don't fail the registration process due to session save error
+          // The user can still use the app, they'll just need to log in again if app restarts
+        }
+      } else {
+        print('WARNING: No Supabase session found after registration');
       }
 
       if (mounted) {

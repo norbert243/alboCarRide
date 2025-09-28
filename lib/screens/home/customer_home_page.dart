@@ -7,7 +7,7 @@ class CustomerHomePage extends StatelessWidget {
 
   Future<void> _signOut(BuildContext context) async {
     await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await SessionService.clearSessionStatic();
 
     final navigatorContext = context;
     if (navigatorContext.mounted) {

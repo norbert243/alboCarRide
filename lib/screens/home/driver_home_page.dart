@@ -15,7 +15,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
   Future<void> _signOut() async {
     await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await SessionService.clearSessionStatic();
   }
 
   Future<void> _toggleOnlineStatus() async {

@@ -8,6 +8,7 @@ import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/services/session_service.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -31,14 +32,68 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // Wait for Supabase auth state to be ready
       await Future.delayed(const Duration(milliseconds: 500));
 
-      final session = _supabase.auth.currentSession;
-      if (session == null) {
-        // Not authenticated -> show role selection / login
+      // Check both Supabase auth session and local session storage
+      final supabaseSession = _supabase.auth.currentSession;
+      final localSessionData = await SessionService.getSessionDataStatic();
+      final hasLocalSession = await SessionService.hasValidSessionStatic();
+
+      debugPrint('Session check:');
+      debugPrint(
+        '  Supabase session: ${supabaseSession != null ? "Exists" : "Null"}',
+      );
+      debugPrint(
+        '  Local session: ${hasLocalSession ? "Valid" : "Invalid/Expired"}',
+      );
+      debugPrint('  Local session data: $localSessionData');
+
+      // If no session exists in either storage, go to role selection
+      if (supabaseSession == null && !hasLocalSession) {
+        debugPrint('No valid session found, routing to role selection');
         _navigateToRoleSelection();
         return;
       }
 
-      final user = _supabase.auth.currentUser!;
+      // If Supabase session exists but local session doesn't, save local session
+      if (supabaseSession != null && !hasLocalSession) {
+        debugPrint(
+          'Supabase session exists but local session missing, saving local session',
+        );
+        final user = _supabase.auth.currentUser!;
+        final userData = user.userMetadata ?? {};
+        final expiry = supabaseSession.expiresAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(
+                supabaseSession.expiresAt! * 1000,
+              )
+            : DateTime.now().add(const Duration(days: 30));
+
+        await SessionService.saveSessionStatic(
+          userId: user.id,
+          userPhone: userData['phone']?.toString() ?? '',
+          userRole: userData['role']?.toString() ?? 'customer',
+          expiry: expiry,
+        );
+      }
+
+      // If local session exists but Supabase session doesn't, try to restore auth
+      if (!hasLocalSession && supabaseSession == null) {
+        debugPrint(
+          'Local session exists but Supabase session missing, attempting to restore',
+        );
+        // For now, we'll treat this as no session since we can't restore Supabase auth
+        // In a production app, you might implement token refresh logic here
+        await SessionService.clearSessionStatic();
+        _navigateToRoleSelection();
+        return;
+      }
+
+      // Get the current user (either from Supabase or local session)
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        debugPrint('User is null, routing to role selection');
+        _navigateToRoleSelection();
+        return;
+      }
+
       // Fetch profile
       final profileResponse = await _supabase
           .from('profiles')
@@ -46,13 +101,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
           .eq('id', user.id);
 
       if (profileResponse.isEmpty) {
-        // No profile yet -> route to signup
-        _navigateToSignup();
+        debugPrint('No profile found for user ${user.id}, routing to signup');
+        // No profile yet -> route to signup with role from session
+        final sessionRole =
+            await SessionService.getUserRoleStatic() ?? 'customer';
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/signup',
+          (route) => false,
+          arguments: sessionRole,
+        );
         return;
       }
 
       final profile = profileResponse.first as Map<String, dynamic>;
       final role = profile['role'] as String? ?? 'customer';
+
+      debugPrint('User authenticated successfully:');
+      debugPrint('  User ID: ${user.id}');
+      debugPrint('  Role: $role');
 
       if (role == 'driver') {
         await _handleDriverRouting(user.id, profile);
@@ -62,7 +129,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     } catch (e) {
       debugPrint('Error in AuthWrapper routing: $e');
-      // Fallback to role selection on error
+      // Clear any corrupted sessions and fallback to role selection
+      await SessionService.clearSessionStatic();
       _navigateToRoleSelection();
     } finally {
       if (mounted) {

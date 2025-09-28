@@ -26,7 +26,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
     setState(() => _isLoading = true);
 
     try {
-      _customerId = await SessionService.getUserId();
+      _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
         // Load payment history and saved methods
