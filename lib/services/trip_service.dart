@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/trip.dart';
-import '../widgets/custom_toast.dart';
 
 /// Service for managing trip lifecycle and operations
 class TripService {
@@ -41,8 +40,48 @@ class TripService {
       updateTripStatus(tripId, 'driver_arrived');
   Future<void> startTrip(String tripId) =>
       updateTripStatus(tripId, 'in_progress');
-  Future<void> completeTrip(String tripId) =>
-      updateTripStatus(tripId, 'completed');
+
+  /// Complete trip and finalize payment via RPC
+  Future<Map<String, dynamic>> completeTrip(String tripId) async {
+    try {
+      // 1) Update trip status to 'completed' via safe update
+      final resp = await supabase
+          .from('trips')
+          .update({
+            'status': 'completed',
+            'completed_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', tripId);
+
+      if (resp.error != null) {
+        throw Exception(
+          'Failed to mark trip completed: ${resp.error!.message}',
+        );
+      }
+
+      // 2) Call RPC finalize_trip_payment to atomically create payment & earnings & update wallet
+      final rpcResp = await supabase.rpc(
+        'finalize_trip_payment',
+        params: {'p_trip_id': tripId},
+      );
+
+      if (rpcResp.error != null) {
+        // consider rolling back or notify admin; for now surface error
+        throw Exception(
+          'Payment finalization failed: ${rpcResp.error!.message}',
+        );
+      }
+
+      // rpcResp.data will be JSONB; convert to Map
+      final Map<String, dynamic> result = Map<String, dynamic>.from(
+        rpcResp.data as Map,
+      );
+      return result;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> cancelTrip(String tripId) =>
       updateTripStatus(tripId, 'cancelled');
 
@@ -245,7 +284,7 @@ class TripService {
           ? response.data[0]
           : response.data;
       return Map<String, dynamic>.from(row);
-    } catch (e, st) {
+    } catch (e) {
       // log to telemetry via your telemetry function
       try {
         await supabase.from('telemetry_logs').insert({
@@ -258,31 +297,6 @@ class TripService {
         print('Failed to log telemetry: $logError');
       }
       rethrow;
-    }
-  }
-
-  /// Create a notification for trip updates
-  Future<void> _createNotification({
-    required String tripId,
-    required String title,
-    required String message,
-    required String type,
-  }) async {
-    try {
-      // Get trip details to find rider ID
-      final trip = await getTripWithDetails(tripId);
-
-      await supabase.from('notifications').insert({
-        'user_id': trip.riderId,
-        'title': title,
-        'message': message,
-        'type': type,
-        'trip_id': tripId,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      // Log error but don't fail the main operation
-      print('Failed to create notification: $e');
     }
   }
 }
