@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/ride_negotiation_service.dart';
+import '../services/ride_matching_service.dart';
 import '../services/session_service.dart';
 import 'custom_toast.dart';
 
@@ -13,8 +13,8 @@ class OfferBoard extends StatefulWidget {
 }
 
 class _OfferBoardState extends State<OfferBoard> {
-  late RideNegotiationService _negotiationService;
-  late Stream<List<RideOffer>> _offersStream;
+  final RideMatchingService _matchingService = RideMatchingService();
+  late Stream<List<Map<String, dynamic>>> _offersStream;
   bool _isLoading = false;
 
   @override
@@ -24,9 +24,6 @@ class _OfferBoardState extends State<OfferBoard> {
   }
 
   Future<void> _initializeServices() async {
-    final supabase = Supabase.instance.client;
-    _negotiationService = RideNegotiationService(supabase);
-
     String? driverId;
     try {
       driverId = await SessionService.getUserIdStatic();
@@ -35,19 +32,39 @@ class _OfferBoardState extends State<OfferBoard> {
     }
 
     if (driverId != null) {
-      _offersStream = _negotiationService.watchPendingOffers(driverId);
+      // Start the matching service to listen for offers
+      await _matchingService.startMatchingService();
+
+      // Subscribe to offers stream (this would need to be implemented in RideMatchingService)
+      _offersStream = _watchPendingOffers(driverId);
     } else {
       _offersStream = Stream.value([]);
     }
   }
 
-  Future<void> _handleAcceptOffer(RideOffer offer) async {
+  /// Watch pending offers for a driver
+  Stream<List<Map<String, dynamic>>> _watchPendingOffers(String driverId) {
+    return _matchingService.supabaseClient
+        .from('ride_offers')
+        .stream(primaryKey: ['id'])
+        .map(
+          (events) => events
+              .where(
+                (offer) =>
+                    offer['driver_id'] == driverId &&
+                    offer['status'] == 'pending',
+              )
+              .toList(),
+        );
+  }
+
+  Future<void> _handleAcceptOffer(Map<String, dynamic> offer) async {
     setState(() => _isLoading = true);
     try {
-      await _negotiationService.acceptOffer(offer.id);
+      await _matchingService.acceptOffer(offer['id'] as String);
       CustomToast.showSuccess(
         context: context,
-        message: 'Offer accepted successfully!',
+        message: 'Offer accepted successfully! Trip created.',
       );
     } catch (e) {
       CustomToast.showError(
@@ -59,10 +76,16 @@ class _OfferBoardState extends State<OfferBoard> {
     }
   }
 
-  Future<void> _handleRejectOffer(RideOffer offer) async {
+  Future<void> _handleRejectOffer(Map<String, dynamic> offer) async {
     setState(() => _isLoading = true);
     try {
-      await _negotiationService.rejectOffer(offer.id);
+      await _matchingService.supabaseClient
+          .from('ride_offers')
+          .update({
+            'status': 'rejected',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', offer['id']);
       CustomToast.showInfo(context: context, message: 'Offer rejected');
     } catch (e) {
       CustomToast.showError(
@@ -74,7 +97,10 @@ class _OfferBoardState extends State<OfferBoard> {
     }
   }
 
-  Future<void> _handleCounterOffer(RideOffer offer, double counterPrice) async {
+  Future<void> _handleCounterOffer(
+    Map<String, dynamic> offer,
+    double counterPrice,
+  ) async {
     if (counterPrice <= 0) {
       CustomToast.showError(
         context: context,
@@ -85,7 +111,14 @@ class _OfferBoardState extends State<OfferBoard> {
 
     setState(() => _isLoading = true);
     try {
-      await _negotiationService.counterOffer(offer.id, counterPrice);
+      await _matchingService.supabaseClient
+          .from('ride_offers')
+          .update({
+            'offer_price': counterPrice,
+            'status': 'countered',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', offer['id']);
       CustomToast.showSuccess(context: context, message: 'Counter offer sent!');
     } catch (e) {
       CustomToast.showError(
@@ -97,9 +130,10 @@ class _OfferBoardState extends State<OfferBoard> {
     }
   }
 
-  void _showCounterDialog(RideOffer offer) {
+  void _showCounterDialog(Map<String, dynamic> offer) {
+    final proposedPrice = (offer['offer_price'] as num).toDouble();
     final priceController = TextEditingController(
-      text: (offer.proposedPrice * 1.1).toStringAsFixed(2),
+      text: (proposedPrice * 1.1).toStringAsFixed(2),
     );
 
     showDialog(
@@ -109,7 +143,7 @@ class _OfferBoardState extends State<OfferBoard> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Original offer: \$${offer.proposedPrice.toStringAsFixed(2)}'),
+            Text('Original offer: \$${proposedPrice.toStringAsFixed(2)}'),
             const SizedBox(height: 16),
             TextField(
               controller: priceController,
@@ -147,7 +181,7 @@ class _OfferBoardState extends State<OfferBoard> {
     );
   }
 
-  Widget _buildOfferCard(RideOffer offer) {
+  Widget _buildOfferCard(Map<String, dynamic> offer) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 3,
@@ -160,7 +194,7 @@ class _OfferBoardState extends State<OfferBoard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '\$${offer.proposedPrice.toStringAsFixed(2)}',
+                  '\$${(offer['offer_price'] as num).toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -169,7 +203,7 @@ class _OfferBoardState extends State<OfferBoard> {
                 ),
                 Chip(
                   label: Text(
-                    offer.status.toUpperCase(),
+                    (offer['status'] as String).toUpperCase(),
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Colors.orange[100],
@@ -177,14 +211,13 @@ class _OfferBoardState extends State<OfferBoard> {
               ],
             ),
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.location_on, 'Pickup:', offer.pickupLocation),
-            _buildInfoRow(Icons.flag, 'Destination:', offer.destination),
-            if (offer.notes != null && offer.notes!.isNotEmpty)
-              _buildInfoRow(Icons.note, 'Notes:', offer.notes!),
+            // These fields would need to be joined from ride_requests table
+            _buildInfoRow(Icons.location_on, 'Pickup:', 'Loading...'),
+            _buildInfoRow(Icons.flag, 'Destination:', 'Loading...'),
             _buildInfoRow(
               Icons.access_time,
               'Received:',
-              _formatTimeAgo(offer.createdAt),
+              _formatTimeAgo(DateTime.parse(offer['created_at'] as String)),
             ),
             const SizedBox(height: 16),
             if (!_isLoading) _buildActionButtons(offer),
@@ -222,7 +255,7 @@ class _OfferBoardState extends State<OfferBoard> {
     );
   }
 
-  Widget _buildActionButtons(RideOffer offer) {
+  Widget _buildActionButtons(Map<String, dynamic> offer) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
@@ -295,7 +328,7 @@ class _OfferBoardState extends State<OfferBoard> {
           return const Center(child: Text('Please log in to view ride offers'));
         }
 
-        return StreamBuilder<List<RideOffer>>(
+        return StreamBuilder<List<Map<String, dynamic>>>(
           stream: _offersStream,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
@@ -316,9 +349,7 @@ class _OfferBoardState extends State<OfferBoard> {
               onRefresh: () async {
                 // Force refresh by re-initializing the stream
                 setState(() {
-                  _offersStream = _negotiationService.watchPendingOffers(
-                    driverId,
-                  );
+                  _offersStream = _watchPendingOffers(driverId);
                 });
               },
               child: ListView.builder(
@@ -331,5 +362,11 @@ class _OfferBoardState extends State<OfferBoard> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _matchingService.dispose();
+    super.dispose();
   }
 }

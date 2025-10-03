@@ -1,93 +1,65 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/trip.dart';
+import '../widgets/custom_toast.dart';
 
 /// Service for managing trip lifecycle and operations
 class TripService {
-  final SupabaseClient _client = Supabase.instance.client;
+  final SupabaseClient supabase;
 
-  /// Start a trip: set status to 'in_progress'
-  Future<void> startTrip(String tripId) async {
-    try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'in_progress',
-            'start_time': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
+  TripService({SupabaseClient? client})
+    : supabase = client ?? Supabase.instance.client;
 
-      // Also update the corresponding ride status for consistency
-      await _client
-          .from('rides')
-          .update({
-            'status': 'in_progress',
-            'started_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-    } catch (e) {
-      throw Exception('Failed to start trip: $e');
+  /// Accept an offer atomically -> creates trip
+  Future<void> acceptOffer(String offerId) async {
+    final response = await supabase.rpc(
+      'accept_offer_atomic',
+      params: {'offer_id': offerId},
+    );
+    if (response.error != null) {
+      throw Exception('Offer acceptance failed: ${response.error!.message}');
     }
   }
 
-  /// Complete a trip: set status to 'completed'
-  Future<void> completeTrip(String tripId) async {
-    try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'completed',
-            'end_time': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-
-      // Also update the corresponding ride status
-      await _client
-          .from('rides')
-          .update({
-            'status': 'completed',
-            'completed_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-    } catch (e) {
-      throw Exception('Failed to complete trip: $e');
+  /// Update trip status via RPC
+  Future<void> updateTripStatus(String tripId, String newStatus) async {
+    final response = await supabase.rpc(
+      'update_trip_status',
+      params: {'trip_id': tripId, 'new_status': newStatus},
+    );
+    if (response.error != null) {
+      throw Exception('Trip status update failed: ${response.error!.message}');
     }
   }
 
-  /// Cancel a trip with reason
-  Future<void> cancelTrip(String tripId, String reason) async {
-    try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'cancelled',
-            'end_time': DateTime.now().toIso8601String(),
-            'cancellation_reason': reason,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
+  /// Status wrappers
+  Future<Trip> onMyWay(String tripId) async {
+    await updateTripStatus(tripId, 'accepted');
+    return await getTripWithDetails(tripId);
+  }
 
-      // Also update the corresponding ride status
-      await _client
-          .from('rides')
-          .update({
-            'status': 'cancelled',
-            'cancelled_at': DateTime.now().toIso8601String(),
-            'cancellation_reason': reason,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-    } catch (e) {
-      throw Exception('Failed to cancel trip: $e');
-    }
+  Future<void> arrived(String tripId) =>
+      updateTripStatus(tripId, 'driver_arrived');
+  Future<void> startTrip(String tripId) =>
+      updateTripStatus(tripId, 'in_progress');
+  Future<void> completeTrip(String tripId) =>
+      updateTripStatus(tripId, 'completed');
+  Future<void> cancelTrip(String tripId) =>
+      updateTripStatus(tripId, 'cancelled');
+
+  /// Subscribe to trip updates
+  Stream<Trip> subscribeToTrip(String tripId) {
+    return supabase
+        .from('trips:id=eq.$tripId')
+        .stream(primaryKey: ['id'])
+        .map(
+          (rows) => rows.isNotEmpty ? Trip.fromMap(rows.first) : Trip.empty(),
+        );
   }
 
   /// Get active trip for a driver
   Future<Map<String, dynamic>?> getActiveTrip(String driverId) async {
     try {
-      final response = await _client
+      final response = await supabase
           .from('trips')
           .select('''
             *,
@@ -129,18 +101,9 @@ class TripService {
     }
   }
 
-  /// Subscribe to a specific trip's updates
-  Stream<Map<String, dynamic>> subscribeToTrip(String tripId) {
-    return _client
-        .from('trips')
-        .stream(primaryKey: ['id'])
-        .eq('id', tripId)
-        .map((events) => events.isNotEmpty ? events.first : {});
-  }
-
   /// Subscribe to driver's active trips
   Stream<List<Map<String, dynamic>>> subscribeToDriverTrips(String driverId) {
-    return _client
+    return supabase
         .from('trips')
         .stream(primaryKey: ['id'])
         .eq('driver_id', driverId)
@@ -162,7 +125,7 @@ class TripService {
     int limit = 20,
   }) async {
     try {
-      final response = await _client
+      final response = await supabase
           .from('trips')
           .select('''
             *,
@@ -198,7 +161,7 @@ class TripService {
   /// Calculate trip earnings for a driver
   Future<double> calculateTripEarnings(String tripId) async {
     try {
-      final response = await _client
+      final response = await supabase
           .from('trips')
           .select('final_price')
           .eq('id', tripId)
@@ -208,6 +171,118 @@ class TripService {
       return finalPrice?.toDouble() ?? 0.0;
     } catch (e) {
       throw Exception('Failed to calculate trip earnings: $e');
+    }
+  }
+
+  /// Subscribe to rider's trips for real-time updates
+  Stream<List<Trip>> subscribeToRiderTrips(String riderId) {
+    return supabase
+        .from('trips')
+        .stream(primaryKey: ['id'])
+        .eq('rider_id', riderId)
+        .map((events) {
+          return events.map((tripData) => Trip.fromMap(tripData)).toList();
+        });
+  }
+
+  /// Subscribe to driver's trips for real-time updates
+  Stream<List<Trip>> subscribeToDriverTripsModel(String driverId) {
+    return supabase
+        .from('trips')
+        .stream(primaryKey: ['id'])
+        .eq('driver_id', driverId)
+        .map((events) {
+          return events.map((tripData) => Trip.fromMap(tripData)).toList();
+        });
+  }
+
+  /// Get trip with full details including rider and driver info
+  Future<Trip> getTripWithDetails(String tripId) async {
+    try {
+      final response = await supabase
+          .from('trips')
+          .select('''
+            *,
+            ride_requests!inner(
+              pickup_address,
+              dropoff_address,
+              proposed_price,
+              notes
+            ),
+            profiles!trips_rider_id_fkey(
+              full_name,
+              phone,
+              avatar_url
+            ),
+            drivers!trips_driver_id_fkey(
+              vehicle_make,
+              vehicle_model,
+              vehicle_color,
+              license_plate
+            )
+          ''')
+          .eq('id', tripId)
+          .single();
+
+      return Trip.fromMap(response);
+    } catch (e) {
+      throw Exception('Failed to get trip details: $e');
+    }
+  }
+
+  /// Completes the trip with cash payment using the atomic RPC.
+  Future<Map<String, dynamic>> completeTripWithCash(String tripId) async {
+    try {
+      final response = await supabase.rpc(
+        'complete_trip_with_cash',
+        params: {'p_trip_id': tripId},
+      );
+      if (response.error != null) {
+        throw Exception('RPC error: ${response.error!.message}');
+      }
+      // response.data is a list of rows from the function — we expect one
+      final row = (response.data is List && response.data.isNotEmpty)
+          ? response.data[0]
+          : response.data;
+      return Map<String, dynamic>.from(row);
+    } catch (e, st) {
+      // log to telemetry via your telemetry function
+      try {
+        await supabase.from('telemetry_logs').insert({
+          'type': 'complete_trip_error',
+          'message': e.toString(),
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+        });
+      } catch (logError) {
+        // If logging fails, just print
+        print('Failed to log telemetry: $logError');
+      }
+      rethrow;
+    }
+  }
+
+  /// Create a notification for trip updates
+  Future<void> _createNotification({
+    required String tripId,
+    required String title,
+    required String message,
+    required String type,
+  }) async {
+    try {
+      // Get trip details to find rider ID
+      final trip = await getTripWithDetails(tripId);
+
+      await supabase.from('notifications').insert({
+        'user_id': trip.riderId,
+        'title': title,
+        'message': message,
+        'type': type,
+        'trip_id': tripId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      // Log error but don't fail the main operation
+      print('Failed to create notification: $e');
     }
   }
 }

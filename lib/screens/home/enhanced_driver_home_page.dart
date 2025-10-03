@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/session_service.dart';
 import '../../services/trip_service.dart';
+import '../../services/driver_location_service.dart';
+import '../../services/ride_matching_service.dart';
+import '../../models/trip.dart';
 import '../../widgets/trip_card_widget.dart';
 import '../../widgets/offer_board.dart';
 import '../driver/verification_page.dart';
@@ -16,11 +19,13 @@ class EnhancedDriverHomePage extends StatefulWidget {
 
 class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   final TripService _tripService = TripService();
+  final DriverLocationService _locationService = DriverLocationService();
+  final RideMatchingService _matchingService = RideMatchingService();
 
   bool _isOnline = false;
   bool _isLoading = false;
   bool _hasActiveTrip = false;
-  Map<String, dynamic>? _activeTrip;
+  Trip? _activeTrip;
   String? _driverId;
   String? _verificationStatus;
   String? _vehicleType;
@@ -33,6 +38,8 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   @override
   void dispose() {
+    _locationService.dispose();
+    _matchingService.dispose();
     super.dispose();
   }
 
@@ -125,14 +132,21 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   Future<void> _checkActiveTrip() async {
     try {
       final activeTrip = await _tripService.getActiveTrip(_driverId!);
-      setState(() {
-        _hasActiveTrip = activeTrip != null;
-        _activeTrip = activeTrip;
-      });
+      if (activeTrip != null) {
+        // Convert Map to Trip object
+        final trip = Trip.fromMap(activeTrip);
+        setState(() {
+          _hasActiveTrip = true;
+          _activeTrip = trip;
+        });
 
-      // Subscribe to trip updates if there's an active trip
-      if (_hasActiveTrip) {
+        // Subscribe to trip updates if there's an active trip
         _subscribeToTripUpdates();
+      } else {
+        setState(() {
+          _hasActiveTrip = false;
+          _activeTrip = null;
+        });
       }
     } catch (e) {
       debugPrint('Error checking active trip: $e');
@@ -141,13 +155,13 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   void _subscribeToTripUpdates() {
     if (_activeTrip != null) {
-      _tripService.subscribeToTrip(_activeTrip!['id']).listen((tripUpdate) {
+      _tripService.subscribeToTrip(_activeTrip!.id).listen((tripUpdate) {
         if (mounted) {
           setState(() {
             _activeTrip = tripUpdate;
             _hasActiveTrip =
-                tripUpdate['status'] != 'completed' &&
-                tripUpdate['status'] != 'cancelled';
+                tripUpdate.status != 'completed' &&
+                tripUpdate.status != 'cancelled';
           });
         }
       });
@@ -168,9 +182,18 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
       setState(() => _isOnline = newStatus);
 
-      // Start/stop location tracking based on online status
-      // Location tracking functionality would be implemented here
-      // using a proper location tracking service
+      // Start/stop location tracking and matching service based on online status
+      if (newStatus) {
+        // Start location tracking when going online
+        await _locationService.startLocationTracking();
+        // Start matching service to listen for ride requests
+        await _matchingService.startMatchingService();
+      } else {
+        // Stop location tracking when going offline
+        await _locationService.stopLocationTracking();
+        // Stop matching service
+        await _matchingService.stopMatchingService();
+      }
 
       debugPrint('Online status updated: $newStatus');
     } catch (e) {

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/trip_service.dart';
+import '../models/trip.dart';
 import '../widgets/custom_toast.dart';
 
 /// Widget that displays active trip information and controls
 class TripCardWidget extends StatefulWidget {
-  final Map<String, dynamic> trip;
+  final Trip trip;
   final VoidCallback onTripCompleted;
   final VoidCallback onTripCancelled;
 
@@ -56,7 +57,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   Future<void> _startTrip() async {
     setState(() => _isLoading = true);
     try {
-      await _tripService.startTrip(widget.trip['id']);
+      await _tripService.startTrip(widget.trip.id);
       CustomToast.showSuccess(
         context: context,
         message: 'Trip started successfully!',
@@ -74,7 +75,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   Future<void> _completeTrip() async {
     setState(() => _isLoading = true);
     try {
-      await _tripService.completeTrip(widget.trip['id']);
+      await _tripService.completeTrip(widget.trip.id);
       CustomToast.showSuccess(
         context: context,
         message: 'Trip completed successfully!',
@@ -96,7 +97,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
 
     setState(() => _isLoading = true);
     try {
-      await _tripService.cancelTrip(widget.trip['id'], reason);
+      await _tripService.cancelTrip(widget.trip.id);
       CustomToast.showInfo(context: context, message: 'Trip cancelled');
       widget.onTripCancelled();
     } catch (e) {
@@ -173,7 +174,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   }
 
   Widget _buildActionButtons() {
-    final status = widget.trip['status'] as String? ?? 'scheduled';
+    final status = widget.trip.status;
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -217,13 +218,8 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   @override
   Widget build(BuildContext context) {
     final trip = widget.trip;
-    final riderName = trip['rider_name'] ?? 'Rider';
-    final pickupAddress = trip['pickup_address'] ?? '';
-    final dropoffAddress = trip['dropoff_address'] ?? '';
-    final proposedPrice = trip['proposed_price'] ?? 0.0;
-    final finalPrice = trip['final_price'] ?? proposedPrice;
-    final status = trip['status'] as String? ?? 'scheduled';
-    final notes = trip['notes'] ?? '';
+    final finalPrice = trip.finalPrice;
+    final status = trip.status;
 
     return Card(
       margin: const EdgeInsets.all(16),
@@ -237,12 +233,9 @@ class _TripCardWidgetState extends State<TripCardWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Trip with $riderName',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                const Text(
+                  'Active Trip',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -268,29 +261,34 @@ class _TripCardWidgetState extends State<TripCardWidget> {
             const SizedBox(height: 16),
 
             // Trip details
-            _buildInfoRow(Icons.location_on, 'Pickup:', pickupAddress),
-            _buildInfoRow(Icons.flag, 'Destination:', dropoffAddress),
+            _buildInfoRow(Icons.person, 'Rider ID:', trip.riderId),
+            _buildInfoRow(Icons.directions_car, 'Driver ID:', trip.driverId),
             _buildInfoRow(
               Icons.attach_money,
               'Fare:',
               '\$${finalPrice.toStringAsFixed(2)}',
             ),
 
-            if (notes.isNotEmpty) _buildInfoRow(Icons.note, 'Notes:', notes),
-
             // Trip timing
-            if (trip['start_time'] != null)
+            if (trip.startTime != null)
               _buildInfoRow(
                 Icons.access_time,
                 'Started:',
-                _formatDateTime(trip['start_time']),
+                _formatDateTime(trip.startTime!.toIso8601String()),
               ),
 
-            if (trip['created_at'] != null)
+            if (trip.createdAt != null)
               _buildInfoRow(
                 Icons.schedule,
                 'Requested:',
-                _formatDateTime(trip['created_at']),
+                _formatDateTime(trip.createdAt.toIso8601String()),
+              ),
+
+            if (trip.cancellationReason != null)
+              _buildInfoRow(
+                Icons.cancel,
+                'Cancellation Reason:',
+                trip.cancellationReason!,
               ),
 
             const SizedBox(height: 16),

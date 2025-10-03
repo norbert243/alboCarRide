@@ -8,7 +8,7 @@ import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
-import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
+import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
 import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
@@ -127,7 +127,8 @@ class MyApp extends StatelessWidget {
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
-        '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
+        '/enhanced-driver-home': (context) =>
+            const ComprehensiveDriverDashboard(),
         '/customer_home': (context) => const CustomerHomePage(),
         '/book-ride': (context) => const BookRidePage(),
         '/ride-history': (context) => const RideHistoryPage(),

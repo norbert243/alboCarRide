@@ -11,6 +11,7 @@ enum DocumentType {
   vehicleRegistration,
   profilePhoto,
   vehiclePhoto,
+  depositProof,
 }
 
 /// Service for handling document uploads with compression and Supabase storage
@@ -325,6 +326,8 @@ extension DocumentTypeExtension on DocumentType {
         return 'Profile Photo';
       case DocumentType.vehiclePhoto:
         return 'Vehicle Photo';
+      case DocumentType.depositProof:
+        return 'Deposit Proof';
     }
   }
 
@@ -338,6 +341,8 @@ extension DocumentTypeExtension on DocumentType {
         return 'Upload a clear profile photo for identification';
       case DocumentType.vehiclePhoto:
         return 'Upload photos showing your vehicle from multiple angles';
+      case DocumentType.depositProof:
+        return 'Upload proof of your deposit payment';
     }
   }
 
@@ -348,6 +353,7 @@ extension DocumentTypeExtension on DocumentType {
         return true;
       case DocumentType.profilePhoto:
       case DocumentType.vehiclePhoto:
+      case DocumentType.depositProof:
         return false;
     }
   }
