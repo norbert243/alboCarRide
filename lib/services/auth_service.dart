@@ -26,14 +26,94 @@ class AuthService {
   /// Initialize authentication service and restore session if available
   static Future<void> initialize() async {
     try {
+      print('🔐 AuthService.initialize: Starting initialization');
+      print('🔐 AuthService.initialize: Checking for existing session...');
+
       // Check if we have a valid session stored
       final hasValidSession = await _hasValidSecureSession();
+      print(
+        '🔐 AuthService.initialize: hasValidSecureSession = $hasValidSession',
+      );
+
       if (hasValidSession) {
         // Restore session from secure storage
+        print(
+          '🔐 AuthService.initialize: ✅ Valid session found, restoring from secure storage',
+        );
         await _restoreSessionFromSecureStorage();
+        print('🔐 AuthService.initialize: ✅ Session restoration completed');
+      } else {
+        print('🔐 AuthService.initialize: ❌ No valid secure session found');
+        print('🔐 AuthService.initialize: User will need to log in again');
       }
+
+      // Check Supabase session after restoration
+      final supabaseSession = Supabase.instance.client.auth.currentSession;
+      print(
+        '🔐 AuthService.initialize: Supabase session after restore = ${supabaseSession != null ? "✅ EXISTS" : "❌ NULL"}',
+      );
     } catch (e) {
-      print('Error initializing auth service: $e');
+      print('❌ Error initializing auth service: $e');
+    }
+  }
+
+  /// WhatsApp-style seamless authentication - check if user can be automatically logged in
+  static Future<bool> canAutoLogin() async {
+    try {
+      print('🔐 AuthService.canAutoLogin: Checking for auto-login capability');
+
+      // Check if we have valid tokens in secure storage
+      final accessToken = await _secureStorage.read(key: _accessTokenKey);
+      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+
+      print(
+        '🔐 AuthService.canAutoLogin: accessToken = ${accessToken != null ? "Exists" : "Null"}',
+      );
+      print(
+        '🔐 AuthService.canAutoLogin: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
+      );
+
+      // If we have both tokens, we can attempt auto-login
+      final canAutoLogin = accessToken != null && refreshToken != null;
+      print('🔐 AuthService.canAutoLogin: canAutoLogin = $canAutoLogin');
+
+      return canAutoLogin;
+    } catch (e) {
+      print('❌ Error checking auto-login capability: $e');
+      return false;
+    }
+  }
+
+  /// Attempt automatic login using stored tokens (WhatsApp-style)
+  static Future<bool> attemptAutoLogin() async {
+    try {
+      print('🔐 AuthService.attemptAutoLogin: Starting automatic login');
+
+      if (!await canAutoLogin()) {
+        print(
+          '🔐 AuthService.attemptAutoLogin: Cannot auto-login - missing tokens',
+        );
+        return false;
+      }
+
+      // Restore session from secure storage
+      await _restoreSessionFromSecureStorage();
+
+      // Verify the session was successfully restored
+      final currentSession = Supabase.instance.client.auth.currentSession;
+      final isAuthenticated = currentSession != null;
+
+      print(
+        '🔐 AuthService.attemptAutoLogin: Auto-login ${isAuthenticated ? "✅ SUCCESS" : "❌ FAILED"}',
+      );
+      print(
+        '🔐 AuthService.attemptAutoLogin: Session exists = ${isAuthenticated ? "Yes" : "No"}',
+      );
+
+      return isAuthenticated;
+    } catch (e) {
+      print('❌ Error during auto-login: $e');
+      return false;
     }
   }
 
@@ -99,18 +179,32 @@ class AuthService {
   /// Check if user is logged in with valid session
   static Future<bool> isLoggedIn() async {
     try {
+      print('🔐 AuthService.isLoggedIn: Starting session validation');
+
       // Check local session validity first
       final hasLocalSession = await _hasValidLocalSession();
-      if (!hasLocalSession) return false;
-
-      // Check if session needs refresh
-      if (await _needsRefresh()) {
-        return await _refreshSession();
+      print('🔐 AuthService.isLoggedIn: hasLocalSession = $hasLocalSession');
+      if (!hasLocalSession) {
+        print('🔐 AuthService.isLoggedIn: ❌ No valid local session found');
+        return false;
       }
 
+      // Check if session needs refresh
+      final needsRefresh = await _needsRefresh();
+      print('🔐 AuthService.isLoggedIn: needsRefresh = $needsRefresh');
+      if (needsRefresh) {
+        print(
+          '🔐 AuthService.isLoggedIn: Session needs refresh, attempting refresh...',
+        );
+        final refreshed = await _refreshSession();
+        print('🔐 AuthService.isLoggedIn: refreshSession result = $refreshed');
+        return refreshed;
+      }
+
+      print('🔐 AuthService.isLoggedIn: ✅ Session is valid');
       return true;
     } catch (e) {
-      print('Error checking login status: $e');
+      print('❌ Error checking login status: $e');
       return false;
     }
   }
@@ -190,10 +284,23 @@ class AuthService {
       final accessToken = await _secureStorage.read(key: _accessTokenKey);
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
 
-      return accessToken != null &&
-          refreshToken != null &&
-          await _hasValidLocalSession();
+      print(
+        'AuthService._hasValidSecureSession: accessToken = ${accessToken != null ? "Exists" : "Null"}',
+      );
+      print(
+        'AuthService._hasValidSecureSession: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
+      );
+
+      final hasTokens = accessToken != null && refreshToken != null;
+      final hasLocalSession = await _hasValidLocalSession();
+
+      print(
+        'AuthService._hasValidSecureSession: hasTokens = $hasTokens, hasLocalSession = $hasLocalSession',
+      );
+
+      return hasTokens && hasLocalSession;
     } catch (e) {
+      print('AuthService._hasValidSecureSession: Error = $e');
       return false;
     }
   }
@@ -202,14 +309,20 @@ class AuthService {
   static Future<bool> _hasValidLocalSession() async {
     final prefs = await SharedPreferences.getInstance();
     final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
+    print('AuthService._hasValidLocalSession: isLoggedIn = $isLoggedIn');
 
     if (!isLoggedIn) return false;
 
     final expiryString = prefs.getString(_sessionExpiryKey);
+    print('AuthService._hasValidLocalSession: expiryString = $expiryString');
     if (expiryString == null) return false;
 
     final expiry = DateTime.parse(expiryString);
-    return expiry.isAfter(DateTime.now());
+    final isValid = expiry.isAfter(DateTime.now());
+    print(
+      'AuthService._hasValidLocalSession: expiry = $expiry, isValid = $isValid',
+    );
+    return isValid;
   }
 
   /// Restore session from secure storage
@@ -218,10 +331,48 @@ class AuthService {
       final accessToken = await _secureStorage.read(key: _accessTokenKey);
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
 
+      print(
+        'AuthService._restoreSessionFromSecureStorage: accessToken = ${accessToken != null ? "Exists" : "Null"}',
+      );
+      print(
+        'AuthService._restoreSessionFromSecureStorage: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
+      );
+
       if (accessToken != null && refreshToken != null) {
-        // Set the tokens in Supabase client
-        await _supabase.auth.setSession(accessToken);
-        print('Session restored from secure storage');
+        // Set the tokens in Supabase client using the correct method
+        print(
+          'AuthService._restoreSessionFromSecureStorage: Setting session in Supabase',
+        );
+
+        // Use the correct Supabase method to restore session
+        // The setSession method expects an access token string
+        try {
+          await _supabase.auth.setSession(accessToken);
+          print(
+            'AuthService._restoreSessionFromSecureStorage: Session restored from secure storage',
+          );
+
+          // Verify the session was set
+          final currentSession = _supabase.auth.currentSession;
+          print(
+            'AuthService._restoreSessionFromSecureStorage: Supabase session after restore = ${currentSession != null ? "Exists" : "Null"}',
+          );
+
+          if (currentSession == null) {
+            print(
+              'AuthService._restoreSessionFromSecureStorage: Session restoration failed, clearing invalid session',
+            );
+            await clearSession();
+          }
+        } catch (e) {
+          print('Error setting session: $e');
+          await clearSession();
+        }
+      } else {
+        print(
+          'AuthService._restoreSessionFromSecureStorage: Missing tokens, cannot restore session',
+        );
+        await clearSession();
       }
     } catch (e) {
       print('Error restoring session: $e');

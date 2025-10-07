@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/auth_service.dart';
 
 class CustomerHomePage extends StatelessWidget {
   const CustomerHomePage({super.key});
 
   Future<void> _signOut(BuildContext context) async {
-    await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await AuthService.clearSession();
 
     final navigatorContext = context;
     if (navigatorContext.mounted) {

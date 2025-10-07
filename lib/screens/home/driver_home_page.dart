@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/auth_service.dart';
 
 class DriverHomePage extends StatefulWidget {
   const DriverHomePage({super.key});
@@ -14,8 +14,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   bool _isLoading = false;
 
   Future<void> _signOut() async {
-    await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await AuthService.clearSession();
   }
 
   Future<void> _toggleOnlineStatus() async {

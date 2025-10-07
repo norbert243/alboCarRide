@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/session_service.dart';
+import '../../services/auth_service.dart';
 import '../../services/trip_service.dart';
 import '../../widgets/trip_card_widget.dart';
 import '../../widgets/offer_board.dart';
@@ -40,7 +40,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
     setState(() => _isLoading = true);
     try {
       // Get driver ID from session
-      _driverId = await SessionService.getUserId();
+      _driverId = await AuthService.getUserId();
       if (_driverId == null) {
         _redirectToLogin();
         return;
@@ -194,8 +194,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   Future<void> _signOut() async {
     // Stop location tracking if implemented
-    await Supabase.instance.client.auth.signOut();
-    await SessionService.clearSession();
+    await AuthService.clearSession();
 
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(

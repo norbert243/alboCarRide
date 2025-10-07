@@ -18,6 +18,7 @@ import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
+import 'package:albocarride/services/auth_service.dart';
 
 // Background message handler (must be a top-level function)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -45,6 +46,11 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // Initialize Auth Service for session management
+  print('main: Initializing AuthService...');
+  await AuthService.initialize();
+  print('main: AuthService initialization completed');
 
   runApp(const MyApp());
 }
@@ -188,7 +194,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const CustomerHomePage(),
+      home: const AuthWrapper(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),

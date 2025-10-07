@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/screens/home/customer_home_page.dart';
-import 'package:albocarride/screens/home/driver_home_page.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
-import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/twilio/twilio_service.dart';
 
 class SignupPage extends StatefulWidget {
@@ -192,7 +190,7 @@ class _SignupPageState extends State<SignupPage> {
           }
         } else {
           // Re-throw other errors
-          throw signUpError;
+          rethrow;
         }
       }
 
@@ -260,28 +258,68 @@ class _SignupPageState extends State<SignupPage> {
         }
       }
 
-      // Save session to persistent storage
+      // Save session to persistent storage using AuthService
+      // WhatsApp-style: Wait longer for Supabase to establish the session properly
+      await Future.delayed(const Duration(milliseconds: 1500));
+
       final session = Supabase.instance.client.auth.currentSession;
-      print('Current session: ${session != null ? "Exists" : "Null"}');
+      print(
+        'SignupPage: Current session: ${session != null ? "Exists" : "Null"}',
+      );
 
-      if (session != null) {
-        final expiry = session.expiresAt != null
-            ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
-            : DateTime.now().add(const Duration(days: 30));
-
-        await SessionService.saveSession(
-          userId: userId,
-          userPhone: phoneNumber,
-          userRole: widget.role,
-          expiry: expiry,
+      if (session == null) {
+        // Try to get the session again after a longer delay
+        print('SignupPage: Session is null, waiting and retrying...');
+        // WhatsApp-style: Longer delay for session establishment
+        await Future.delayed(const Duration(milliseconds: 2000));
+        final retrySession = Supabase.instance.client.auth.currentSession;
+        print(
+          'SignupPage: Retry session: ${retrySession != null ? "Exists" : "Null"}',
         );
-        print('Session saved to local storage');
+
+        if (retrySession != null) {
+          await _saveSessionWithDetails(
+            retrySession,
+            userId,
+            phoneNumber,
+            widget.role,
+          );
+        } else {
+          print('SignupPage: Still no session available after retry');
+          // Even if no session, save basic user info for future reference
+          await AuthService.saveSession(
+            userId: userId,
+            userPhone: phoneNumber,
+            userRole: widget.role,
+            expiry: DateTime.now().add(const Duration(days: 30)),
+            accessToken: null,
+            refreshToken: null,
+          );
+          print('SignupPage: Basic session info saved without tokens');
+        }
+      } else {
+        await _saveSessionWithDetails(
+          session,
+          userId,
+          phoneNumber,
+          widget.role,
+        );
       }
 
       if (mounted) {
         print(
           'Navigating based on user status: isNewUser=$isNewUser, role=${widget.role}',
         );
+
+        // WhatsApp-style: Show success message before navigation
+        CustomToast.showSuccess(
+          context: context,
+          message: 'Welcome to AlboCarRide!',
+        );
+
+        await Future.delayed(
+          const Duration(milliseconds: 500),
+        ); // Brief delay for UX
         await _navigateBasedOnUserStatus(widget.role, userId, isNewUser);
       }
     } catch (e) {
@@ -290,6 +328,47 @@ class _SignupPageState extends State<SignupPage> {
         context: context,
         message: 'Error during registration: ${e.toString()}',
       );
+    }
+  }
+
+  Future<void> _saveSessionWithDetails(
+    Session session,
+    String userId,
+    String phoneNumber,
+    String role,
+  ) async {
+    try {
+      final expiry = session.expiresAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
+          : DateTime.now().add(const Duration(days: 30));
+
+      print('SignupPage: Saving session for user: $userId, role: $role');
+      print('SignupPage: Access token exists: ${session.accessToken != null}');
+      print(
+        'SignupPage: Refresh token exists: ${session.refreshToken != null}',
+      );
+
+      await AuthService.saveSession(
+        userId: userId,
+        userPhone: phoneNumber,
+        userRole: role,
+        expiry: expiry,
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+      print('SignupPage: Session saved to local storage using AuthService');
+    } catch (e) {
+      print('SignupPage: Error saving session: $e');
+      // Fallback: save basic info without tokens
+      await AuthService.saveSession(
+        userId: userId,
+        userPhone: phoneNumber,
+        userRole: role,
+        expiry: DateTime.now().add(const Duration(days: 30)),
+        accessToken: null,
+        refreshToken: null,
+      );
+      print('SignupPage: Basic session info saved as fallback');
     }
   }
 
@@ -372,7 +451,7 @@ class _SignupPageState extends State<SignupPage> {
             } else {
               // Everything complete - go to driver home
               print('  Routing existing driver to driver home');
-              Navigator.pushNamed(context, '/enhanced_driver_home');
+              Navigator.pushNamed(context, '/enhanced-driver-home');
             }
           } else {
             // Unknown status - default to verification
@@ -420,7 +499,7 @@ class _SignupPageState extends State<SignupPage> {
         throw Exception('Failed to create/update profile: No data returned');
       }
 
-      return response.first as Map<String, dynamic>;
+      return response.first;
     } catch (e) {
       throw Exception('Failed to create/update profile: $e');
     }
@@ -449,7 +528,7 @@ class _SignupPageState extends State<SignupPage> {
         );
       }
 
-      return response.first as Map<String, dynamic>;
+      return response.first;
     } catch (e) {
       throw Exception('Failed to create/update driver record: $e');
     }
@@ -480,7 +559,7 @@ class _SignupPageState extends State<SignupPage> {
         );
       }
 
-      return response.first as Map<String, dynamic>;
+      return response.first;
     } catch (e) {
       throw Exception('Failed to create/update customer record: $e');
     }
@@ -496,7 +575,7 @@ class _SignupPageState extends State<SignupPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Sign Up as ${widget.role.capitalize()}',
+          'Sign Up as ${widget.role[0].toUpperCase()}${widget.role.substring(1)}',
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.black87,
@@ -506,62 +585,56 @@ class _SignupPageState extends State<SignupPage> {
         elevation: 0,
         foregroundColor: Colors.black87,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: MediaQuery.of(context).size.height,
-          ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 const SizedBox(height: 20),
                 Text(
-                  'Create Account',
+                  'Join AlboCarRide as a ${widget.role}',
                   style: const TextStyle(
-                    fontSize: 28,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Join AlboCarRide as a ${widget.role}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
+                const Text(
+                  'Enter your details to get started',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
-                const SizedBox(height: 40),
-
-                // Form Fields
-                _buildTextField(
+                const SizedBox(height: 32),
+                TextFormField(
                   controller: _phoneController,
-                  label: 'Phone Number',
-                  icon: Icons.phone_outlined,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    prefixText: '+27 ',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                   keyboardType: TextInputType.phone,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your phone number';
                     }
-                    if (value.length < 10) {
+                    if (value.length < 9) {
                       return 'Please enter a valid phone number';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
-
-                _buildTextField(
+                const SizedBox(height: 16),
+                TextFormField(
                   controller: _fullNameController,
-                  label: 'Full Name',
-                  icon: Icons.person_outlined,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
+                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your full name';
@@ -569,79 +642,65 @@ class _SignupPageState extends State<SignupPage> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 20),
-
+                const SizedBox(height: 16),
                 if (_otpSent) ...[
-                  _buildTextField(
+                  TextFormField(
                     controller: _otpController,
-                    label: 'Verification Code',
-                    icon: Icons.sms_outlined,
+                    decoration: const InputDecoration(
+                      labelText: 'Enter OTP',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock),
+                    ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Please enter the verification code';
+                        return 'Please enter the OTP';
                       }
                       if (value.length != 6) {
-                        return 'Verification code must be 6 digits';
+                        return 'OTP must be 6 digits';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                 ],
-
                 if (!_otpSent) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'We\'ll send a verification code to your phone',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
+                  const SizedBox(height: 16),
+                  const Text(
+                    'We\'ll send you a verification code to confirm your phone number',
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
                   ),
-                  const SizedBox(height: 32),
-                ] else ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enter the 6-digit code sent to your phone',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                 ],
-
-                // Submit Button
+                const Spacer(),
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size(double.infinity, 50),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    elevation: 2,
                   ),
                   child: _isLoading
                       ? const SizedBox(
-                          width: 20,
                           height: 20,
+                          width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : Text(
-                          _otpSent
-                              ? 'Verify & Continue'
-                              : 'Send Verification Code',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          _otpSent ? 'Verify & Sign Up' : 'Send OTP',
+                          style: const TextStyle(fontSize: 16),
                         ),
                 ),
-                const SizedBox(height: 24),
-
                 if (_otpSent) ...[
+                  const SizedBox(height: 16),
                   TextButton(
                     onPressed: _isLoading
                         ? null
@@ -649,62 +708,15 @@ class _SignupPageState extends State<SignupPage> {
                             _otpSent = false;
                             _otpController.clear();
                           }),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.deepPurple,
-                    ),
                     child: const Text(
-                      'Change phone number',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      'Change Phone Number',
+                      style: TextStyle(color: Colors.blue),
                     ),
                   ),
                 ],
-                const SizedBox(height: 40),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool obscureText = false,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      validator: validator,
-      style: const TextStyle(fontSize: 16, color: Colors.black87),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-        prefixIcon: Icon(icon, color: Colors.grey[600], size: 20),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey[300]!),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 16,
-          horizontal: 20,
         ),
       ),
     );

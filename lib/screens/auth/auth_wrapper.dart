@@ -1,13 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/screens/auth/role_selection_page.dart';
-import 'package:albocarride/screens/auth/signup_page.dart';
-import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
-import 'package:albocarride/screens/driver/verification_page.dart';
-import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
-import 'package:albocarride/screens/home/customer_home_page.dart';
-import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
-import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/services/auth_service.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -28,17 +21,121 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _checkAndRoute() async {
     try {
+      print('🔐 AuthWrapper: Starting authentication check');
+
       // Wait for Supabase auth state to be ready
       await Future.delayed(const Duration(milliseconds: 500));
+      print('🔐 AuthWrapper: Supabase initialization delay completed');
 
+      // WhatsApp-style: Attempt automatic login first
+      print('🔐 AuthWrapper: Attempting WhatsApp-style auto-login...');
+      final autoLoginSuccess = await AuthService.attemptAutoLogin();
+      print('🔐 AuthWrapper: Auto-login result = $autoLoginSuccess');
+
+      if (autoLoginSuccess) {
+        print(
+          '🔐 AuthWrapper: ✅ WhatsApp-style auto-login successful, routing to homepage',
+        );
+        await _routeBasedOnUserRole();
+        return;
+      }
+
+      // Check if user has a valid session stored locally
+      print('🔐 AuthWrapper: Checking local session storage...');
+      final hasValidSession = await AuthService.isLoggedIn();
+      print('🔐 AuthWrapper: hasValidSession = $hasValidSession');
+
+      if (hasValidSession) {
+        print(
+          '🔐 AuthWrapper: ✅ User has valid session, skipping role selection',
+        );
+        await _routeBasedOnUserRole();
+        return;
+      }
+
+      // If no local session, check Supabase auth
+      print('🔐 AuthWrapper: No local session found, checking Supabase...');
       final session = _supabase.auth.currentSession;
+      print(
+        '🔐 AuthWrapper: Supabase session = ${session != null ? "✅ EXISTS" : "❌ NULL"}',
+      );
+
       if (session == null) {
         // Not authenticated -> show role selection / login
+        print(
+          '🔐 AuthWrapper: ❌ No session found, navigating to role selection',
+        );
         _navigateToRoleSelection();
         return;
       }
 
+      // User has Supabase session but no local session - save it
+      print(
+        '🔐 AuthWrapper: ✅ Supabase session exists but no local session, saving session',
+      );
+      await _saveSessionAndRoute();
+    } catch (e) {
+      print('❌ Error in AuthWrapper routing: $e');
+      // Fallback to role selection on error
+      _navigateToRoleSelection();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _saveSessionAndRoute() async {
+    try {
       final user = _supabase.auth.currentUser!;
+      debugPrint('AuthWrapper: Current user ID = ${user.id}');
+
+      // Fetch profile to get user role
+      final profileResponse = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id);
+
+      if (profileResponse.isEmpty) {
+        debugPrint(
+          'AuthWrapper: No profile found for user, navigating to signup',
+        );
+        // No profile yet -> route to signup
+        _navigateToSignup();
+        return;
+      }
+
+      final profile = profileResponse.first as Map<String, dynamic>;
+      final role = profile['role'] as String? ?? 'customer';
+      final userPhone = user.phone ?? user.email ?? '';
+      debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
+
+      // Save session for future use
+      await AuthService.saveSession(
+        userId: user.id,
+        userPhone: userPhone,
+        userRole: role,
+        expiry: DateTime.now().add(const Duration(days: 30)),
+        accessToken: _supabase.auth.currentSession?.accessToken,
+        refreshToken: _supabase.auth.currentSession?.refreshToken,
+      );
+
+      debugPrint(
+        'AuthWrapper: Session saved for user: ${user.id} with role: $role',
+      );
+
+      // Route based on user role
+      await _routeBasedOnUserRole();
+    } catch (e) {
+      debugPrint('Error saving session: $e');
+      _navigateToRoleSelection();
+    }
+  }
+
+  Future<void> _routeBasedOnUserRole() async {
+    try {
+      final user = _supabase.auth.currentUser!;
+
       // Fetch profile
       final profileResponse = await _supabase
           .from('profiles')
@@ -61,13 +158,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _navigateToCustomerHome();
       }
     } catch (e) {
-      debugPrint('Error in AuthWrapper routing: $e');
-      // Fallback to role selection on error
+      debugPrint('Error in routing based on user role: $e');
       _navigateToRoleSelection();
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
@@ -155,7 +247,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _navigateToCustomerHome() {
     Navigator.pushNamedAndRemoveUntil(
       context,
-      '/customer-home',
+      '/customer_home',
       (route) => false,
     );
   }
@@ -196,16 +288,54 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
+            // WhatsApp-style logo/icon
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.deepPurple,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.directions_car,
+                size: 40,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            // WhatsApp-style loading text
             Text(
               _isLoading ? 'Checking authentication...' : 'Redirecting...',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: const TextStyle(
+                fontSize: 18,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
             ),
+            const SizedBox(height: 16),
+            // WhatsApp-style subtle loading indicator
+            SizedBox(
+              width: 40,
+              height: 40,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                backgroundColor: Colors.grey[200],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // WhatsApp-style subtitle
+            if (_isLoading)
+              const Text(
+                'Please wait while we verify your session',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
           ],
         ),
       ),
