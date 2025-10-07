@@ -34,7 +34,7 @@ class _BookRidePageState extends State<BookRidePage> {
   }
 
   Future<void> _loadCustomerId() async {
-    _customerId = await SessionService.getUserId();
+    _customerId = await SessionService.getUserIdStatic();
   }
 
   Future<void> _bookRide() async {

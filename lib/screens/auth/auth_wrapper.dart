@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/screens/auth/role_selection_page.dart';
+import 'package:albocarride/screens/auth/signup_page.dart';
+import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
+import 'package:albocarride/screens/driver/verification_page.dart';
+import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
+import 'package:albocarride/screens/home/customer_home_page.dart';
+import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
+import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/services/session_service.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -73,20 +82,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       print(
         '🔐 AuthWrapper: ✅ Supabase session exists but no local session, saving session',
       );
-      await _saveSessionAndRoute();
-    } catch (e) {
-      print('❌ Error in AuthWrapper routing: $e');
-      // Fallback to role selection on error
-      _navigateToRoleSelection();
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
 
-  Future<void> _saveSessionAndRoute() async {
-    try {
       final user = _supabase.auth.currentUser!;
       debugPrint('AuthWrapper: Current user ID = ${user.id}');
 
@@ -110,7 +106,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final userPhone = user.phone ?? user.email ?? '';
       debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
 
-      // Save session for future use
+      // Save session for future use using AuthService
       await AuthService.saveSession(
         userId: user.id,
         userPhone: userPhone,
@@ -127,15 +123,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
       // Route based on user role
       await _routeBasedOnUserRole();
     } catch (e) {
-      debugPrint('Error saving session: $e');
+      print('❌ Error in AuthWrapper routing: $e');
+      // Fallback to role selection on error
       _navigateToRoleSelection();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   Future<void> _routeBasedOnUserRole() async {
     try {
       final user = _supabase.auth.currentUser!;
-
       // Fetch profile
       final profileResponse = await _supabase
           .from('profiles')
@@ -143,13 +143,25 @@ class _AuthWrapperState extends State<AuthWrapper> {
           .eq('id', user.id);
 
       if (profileResponse.isEmpty) {
-        // No profile yet -> route to signup
-        _navigateToSignup();
+        debugPrint('No profile found for user ${user.id}, routing to signup');
+        // No profile yet -> route to signup with role from session
+        final sessionRole =
+            await SessionService.getUserRoleStatic() ?? 'customer';
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/signup',
+          (route) => false,
+          arguments: sessionRole,
+        );
         return;
       }
 
       final profile = profileResponse.first as Map<String, dynamic>;
       final role = profile['role'] as String? ?? 'customer';
+
+      debugPrint('User authenticated successfully:');
+      debugPrint('  User ID: ${user.id}');
+      debugPrint('  Role: $role');
 
       if (role == 'driver') {
         await _handleDriverRouting(user.id, profile);
@@ -159,6 +171,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     } catch (e) {
       debugPrint('Error in routing based on user role: $e');
+      // Clear any corrupted sessions and fallback to role selection
+      await SessionService.clearSessionStatic();
       _navigateToRoleSelection();
     }
   }

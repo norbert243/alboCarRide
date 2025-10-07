@@ -24,7 +24,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
     setState(() => _isLoading = true);
 
     try {
-      _customerId = await SessionService.getUserId();
+      _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
         // In a real implementation, this would query the ride_requests table

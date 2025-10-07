@@ -482,6 +482,44 @@ class _SignupPageState extends State<SignupPage> {
   }) async {
     final supabase = Supabase.instance.client;
 
+    // First, check if profile already exists
+    try {
+      final existingProfile = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .single()
+          .catchError((_) => null);
+
+      if (existingProfile != null) {
+        // Profile exists - update it instead of inserting
+        print('Profile already exists, updating...');
+        final payload = {
+          'id': userId,
+          'full_name': fullName,
+          'phone': phone,
+          'role': role,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+
+        final response = await supabase
+            .from('profiles')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception('Failed to update profile: No data returned');
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error checking existing profile: $e');
+      // Continue with upsert if check fails
+    }
+
+    // Profile doesn't exist or check failed - try upsert
     final payload = {
       'id': userId,
       'full_name': fullName,
@@ -501,6 +539,24 @@ class _SignupPageState extends State<SignupPage> {
 
       return response.first;
     } catch (e) {
+      // If upsert fails with duplicate key, try update
+      if (e.toString().contains('duplicate key') ||
+          e.toString().contains('23505')) {
+        print('UPSERT failed with duplicate key, trying update...');
+        final response = await supabase
+            .from('profiles')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception(
+            'Failed to update profile after duplicate key error: No data returned',
+          );
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
       throw Exception('Failed to create/update profile: $e');
     }
   }
@@ -510,6 +566,45 @@ class _SignupPageState extends State<SignupPage> {
   }) async {
     final supabase = Supabase.instance.client;
 
+    // First, check if driver record already exists
+    try {
+      final existingDriver = await supabase
+          .from('drivers')
+          .select()
+          .eq('id', userId)
+          .single()
+          .catchError((_) => null);
+
+      if (existingDriver != null) {
+        // Driver record exists - update it
+        print('Driver record already exists, updating...');
+        final payload = {
+          'id': userId,
+          'is_approved': false,
+          'is_online': false,
+          'rating': 0.0,
+          'total_rides': 0,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+
+        final response = await supabase
+            .from('drivers')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception('Failed to update driver record: No data returned');
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error checking existing driver record: $e');
+      // Continue with upsert if check fails
+    }
+
+    // Driver record doesn't exist or check failed - try upsert
     final payload = {
       'id': userId,
       'is_approved': false,
@@ -530,6 +625,24 @@ class _SignupPageState extends State<SignupPage> {
 
       return response.first;
     } catch (e) {
+      // If upsert fails with duplicate key, try update
+      if (e.toString().contains('duplicate key') ||
+          e.toString().contains('23505')) {
+        print('Driver UPSERT failed with duplicate key, trying update...');
+        final response = await supabase
+            .from('drivers')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception(
+            'Failed to update driver record after duplicate key error: No data returned',
+          );
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
       throw Exception('Failed to create/update driver record: $e');
     }
   }
@@ -539,6 +652,44 @@ class _SignupPageState extends State<SignupPage> {
   }) async {
     final supabase = Supabase.instance.client;
 
+    // First, check if customer record already exists
+    try {
+      final existingCustomer = await supabase
+          .from('customers')
+          .select()
+          .eq('id', userId)
+          .single()
+          .catchError((_) => null);
+
+      if (existingCustomer != null) {
+        // Customer record exists - update it
+        print('Customer record already exists, updating...');
+        final payload = {
+          'id': userId,
+          'preferred_payment_method': 'cash',
+          'rating': 0.0,
+          'total_rides': 0,
+          'updated_at': DateTime.now().toIso8601String(),
+        };
+
+        final response = await supabase
+            .from('customers')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception('Failed to update customer record: No data returned');
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error checking existing customer record: $e');
+      // Continue with upsert if check fails
+    }
+
+    // Customer record doesn't exist or check failed - try upsert
     final payload = {
       'id': userId,
       'preferred_payment_method': 'cash',
@@ -561,6 +712,24 @@ class _SignupPageState extends State<SignupPage> {
 
       return response.first;
     } catch (e) {
+      // If upsert fails with duplicate key, try update
+      if (e.toString().contains('duplicate key') ||
+          e.toString().contains('23505')) {
+        print('Customer UPSERT failed with duplicate key, trying update...');
+        final response = await supabase
+            .from('customers')
+            .update(payload)
+            .eq('id', userId)
+            .select();
+
+        if (response.isEmpty) {
+          throw Exception(
+            'Failed to update customer record after duplicate key error: No data returned',
+          );
+        }
+
+        return response.first as Map<String, dynamic>;
+      }
       throw Exception('Failed to create/update customer record: $e');
     }
   }

@@ -33,7 +33,7 @@ class _SupportPageState extends State<SupportPage> {
 
   Future<void> _loadCustomerInfo() async {
     try {
-      _customerId = await SessionService.getUserId();
+      _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
         final response = await Supabase.instance.client

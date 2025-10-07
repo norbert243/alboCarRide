@@ -122,11 +122,11 @@ class _VerificationPageState extends State<VerificationPage> {
       for (final entry in _uploadedUrls.entries) {
         if (entry.value != null) {
           await Supabase.instance.client.from('driver_documents').upsert({
-            'user_id': userId,
+            'driver_id': userId,
             'document_type': entry.key.name,
             'document_url': entry.value,
             'uploaded_at': DateTime.now().toIso8601String(),
-            'verification_status': 'pending',
+            'status': 'pending',
           });
         }
       }
