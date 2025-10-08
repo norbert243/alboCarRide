@@ -4,8 +4,7 @@ import 'package:albocarride/widgets/custom_toast.dart';
 
 class VehicleTypeSelectionPage extends StatefulWidget {
   final String driverId;
-  const VehicleTypeSelectionPage({Key? key, required this.driverId})
-    : super(key: key);
+  const VehicleTypeSelectionPage({super.key, required this.driverId});
 
   @override
   State<VehicleTypeSelectionPage> createState() =>

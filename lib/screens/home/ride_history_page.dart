@@ -263,7 +263,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  ..._rideHistory.map(_buildRideCard).toList(),
+                  ..._rideHistory.map(_buildRideCard),
                 ],
               ),
             ),

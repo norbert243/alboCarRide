@@ -19,7 +19,7 @@ class TwilioService {
       uri,
       headers: <String, String>{
         'Authorization':
-            'Basic ' + base64Encode(utf8.encode('$_accountSid:$_authToken')),
+            'Basic ${base64Encode(utf8.encode('$_accountSid:$_authToken'))}',
       },
       body: <String, String>{'From': _phoneNumber, 'To': to, 'Body': message},
     );

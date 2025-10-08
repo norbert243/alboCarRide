@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// API Configuration for AlboCarRide
 ///
@@ -27,8 +28,7 @@ import 'dart:math';
 
 class ApiConfig {
   // Google Maps Platform Configuration
-  static String get googleMapsApiKey =>
-      const String.fromEnvironment('GOOGLE_MAPS_API_KEY', defaultValue: '');
+  static String get googleMapsApiKey => _getEnv('GOOGLE_MAPS_API_KEY');
   static const String googlePlacesBaseUrl =
       'https://maps.googleapis.com/maps/api/place';
   static const String googleDirectionsBaseUrl =
@@ -37,24 +37,19 @@ class ApiConfig {
       'https://maps.googleapis.com/maps/api/geocode';
 
   // Mapbox Configuration (Alternative)
-  static String get mapboxAccessToken =>
-      const String.fromEnvironment('MAPBOX_ACCESS_TOKEN', defaultValue: '');
+  static String get mapboxAccessToken => _getEnv('MAPBOX_ACCESS_TOKEN');
   static const String mapboxBaseUrl = 'https://api.mapbox.com';
 
   // Stripe Configuration
-  static String get stripePublishableKey =>
-      const String.fromEnvironment('STRIPE_PUBLISHABLE_KEY', defaultValue: '');
+  static String get stripePublishableKey => _getEnv('STRIPE_PUBLISHABLE_KEY');
   static const String stripeSecretKey =
       'YOUR_STRIPE_SECRET_KEY'; // Server-side only
   static const String stripeBaseUrl = 'https://api.stripe.com/v1';
 
   // Firebase Configuration
-  static String get firebaseProjectId =>
-      const String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: '');
-  static String get firebaseMessagingSenderId => const String.fromEnvironment(
-    'FIREBASE_MESSAGING_SENDER_ID',
-    defaultValue: '',
-  );
+  static String get firebaseProjectId => _getEnv('FIREBASE_PROJECT_ID');
+  static String get firebaseMessagingSenderId =>
+      _getEnv('FIREBASE_MESSAGING_SENDER_ID');
 
   // Base fare calculation (in cents)
   static const int baseFare = 500; // $5.00
@@ -75,6 +70,20 @@ class ApiConfig {
       '$mapboxBaseUrl/geocoding/v5/mapbox.places';
   static const String mapboxDirectionsEndpoint =
       '$mapboxBaseUrl/directions/v5/mapbox/driving';
+
+  // Helper method to get environment variables
+  static String _getEnv(String key) {
+    try {
+      final value = dotenv.env[key] ?? '';
+      print(
+        '🔍 ApiConfig: Reading $key = ${value.isNotEmpty ? "✓ SET" : "✗ EMPTY"}',
+      );
+      return value;
+    } catch (e) {
+      print('❌ Error reading environment variable $key: $e');
+      return '';
+    }
+  }
 
   // Required API Keys Setup Instructions:
   //

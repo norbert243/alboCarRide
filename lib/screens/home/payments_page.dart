@@ -302,9 +302,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              ..._paymentHistory
-                                  .map(_buildPaymentCard)
-                                  .toList(),
+                              ..._paymentHistory.map(_buildPaymentCard),
                             ],
                           ),
                         ),

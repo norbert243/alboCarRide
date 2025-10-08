@@ -10,17 +10,25 @@ class LocationService {
     if (query.isEmpty) return [];
 
     try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=${ApiConfig.googleMapsApiKey}',
-        ),
-      );
+      final apiKey = ApiConfig.googleMapsApiKey;
+      final url =
+          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey';
+
+      print('🔍 LocationService: Making Places API request');
+      print('🔍 URL: $url');
+      print('🔍 API Key length: ${apiKey.length}');
+
+      final response = await http.get(Uri.parse(url));
+
+      print('🔍 Places API Response Status: ${response.statusCode}');
+      print('🔍 Places API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final predictions = data['predictions'] as List?;
 
         if (predictions != null) {
+          print('🔍 Found ${predictions.length} place suggestions');
           return predictions.map((prediction) {
             return {
               'placeId': prediction['place_id'],
@@ -33,9 +41,11 @@ class LocationService {
             };
           }).toList();
         }
+      } else {
+        print('❌ Places API Error: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('Error getting place suggestions: $e');
+      print('❌ Error getting place suggestions: $e');
     }
 
     return [];
@@ -122,11 +132,17 @@ class LocationService {
   /// Geocode an address to get coordinates
   static Future<Map<String, dynamic>?> geocodeAddress(String address) async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=${ApiConfig.googleMapsApiKey}',
-        ),
-      );
+      final apiKey = ApiConfig.googleMapsApiKey;
+      final url =
+          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=$apiKey';
+
+      print('🔍 LocationService: Making Geocoding API request');
+      print('🔍 URL: $url');
+
+      final response = await http.get(Uri.parse(url));
+
+      print('🔍 Geocoding API Response Status: ${response.statusCode}');
+      print('🔍 Geocoding API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -137,15 +153,22 @@ class LocationService {
           final geometry = result['geometry'];
           final location = geometry?['location'];
 
+          print('🔍 Geocoding successful: ${result['formatted_address']}');
           return {
             'address': result['formatted_address'],
             'latitude': location?['lat'],
             'longitude': location?['lng'],
           };
+        } else {
+          print('❌ No geocoding results found');
         }
+      } else {
+        print(
+          '❌ Geocoding API Error: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
-      print('Error geocoding address: $e');
+      print('❌ Error geocoding address: $e');
     }
 
     return null;

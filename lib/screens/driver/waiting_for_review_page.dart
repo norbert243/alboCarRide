@@ -1,92 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/widgets/custom_toast.dart';
 
-class WaitingForReviewPage extends StatefulWidget {
-  const WaitingForReviewPage({Key? key}) : super(key: key);
-
-  @override
-  State<WaitingForReviewPage> createState() => _WaitingForReviewPageState();
-}
-
-class _WaitingForReviewPageState extends State<WaitingForReviewPage> {
-  final SupabaseClient _supabase = Supabase.instance.client;
-  bool _isCheckingStatus = false;
-
-  /// Check the current verification status from the database
-  Future<void> _checkVerificationStatus() async {
-    if (_isCheckingStatus) return;
-
-    setState(() {
-      _isCheckingStatus = true;
-    });
-
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) {
-        CustomToast.show(context: context, message: 'Please log in again');
-        return;
-      }
-
-      // Get the current verification status
-      final response = await _supabase
-          .from('profiles')
-          .select('verification_status')
-          .eq('id', userId)
-          .single();
-
-      final verificationStatus = response['verification_status'] as String?;
-
-      debugPrint('Current verification status: $verificationStatus');
-
-      if (verificationStatus == 'approved') {
-        CustomToast.show(
-          context: context,
-          message: 'Your verification has been approved!',
-        );
-        // Navigate to driver home page
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/driver-home',
-          (route) => false,
-        );
-      } else if (verificationStatus == 'rejected') {
-        CustomToast.show(
-          context: context,
-          message:
-              'Your verification was rejected. Please resubmit your documents.',
-        );
-        // Navigate to verification page to resubmit
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/verification',
-          (route) => false,
-        );
-      } else if (verificationStatus == 'pending') {
-        CustomToast.show(
-          context: context,
-          message:
-              'Your documents are still under review. Please check back later.',
-        );
-        // Stay on this page
-      } else {
-        CustomToast.show(
-          context: context,
-          message: 'Unknown verification status. Please contact support.',
-        );
-      }
-    } catch (e) {
-      debugPrint('Error checking verification status: $e');
-      CustomToast.show(
-        context: context,
-        message: 'Failed to check status. Please try again.',
-      );
-    } finally {
-      setState(() {
-        _isCheckingStatus = false;
-      });
-    }
-  }
+class WaitingForReviewPage extends StatelessWidget {
+  const WaitingForReviewPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -229,9 +144,10 @@ class _WaitingForReviewPageState extends State<WaitingForReviewPage> {
             Column(
               children: [
                 ElevatedButton(
-                  onPressed: _isCheckingStatus
-                      ? null
-                      : _checkVerificationStatus,
+                  onPressed: () {
+                    // Navigate back to auth wrapper
+                    Navigator.pushNamed(context, '/auth_wrapper');
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -243,18 +159,7 @@ class _WaitingForReviewPageState extends State<WaitingForReviewPage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: _isCheckingStatus
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Text('Check Status'),
+                  child: const Text('Check Status'),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
