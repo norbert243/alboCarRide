@@ -16,7 +16,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkAndRoute();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndRoute();
+    });
   }
 
   Future<void> _checkAndRoute() async {
@@ -105,20 +107,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
       final userPhone = user.phone ?? user.email ?? '';
       debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
 
       // Save session for future use
-      await AuthService.saveSession(
-        userId: user.id,
-        userPhone: userPhone,
-        userRole: role,
-        expiry: DateTime.now().add(const Duration(days: 30)),
-        accessToken: _supabase.auth.currentSession?.accessToken,
-        refreshToken: _supabase.auth.currentSession?.refreshToken,
-      );
+      await AuthService.saveSession(_supabase.auth.currentSession!);
 
       debugPrint(
         'AuthWrapper: Session saved for user: ${user.id} with role: $role',
@@ -148,7 +143,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
 
       if (role == 'driver') {

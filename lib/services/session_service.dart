@@ -92,4 +92,14 @@ class SessionService {
     final sessionData = await getSessionData();
     return sessionData != null;
   }
+
+  /// Static method to get user ID (alias for getUserId)
+  static Future<String?> getUserIdStatic() async {
+    return getUserId();
+  }
+
+  /// Check if user is authenticated
+  static Future<bool> get isAuthenticated async {
+    return await isLoggedIn();
+  }
 }

@@ -1,8 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:developer';
+import 'db_service.dart';
 
 /// Service for managing trip lifecycle and operations
 class TripService {
   final SupabaseClient _client = Supabase.instance.client;
+  final supabase = DBService.instance.supabase;
 
   /// Start a trip: set status to 'in_progress'
   Future<void> startTrip(String tripId) async {
@@ -209,5 +212,53 @@ class TripService {
     } catch (e) {
       throw Exception('Failed to calculate trip earnings: $e');
     }
+  }
+
+  /// Accept a ride offer and create a trip
+  Future<void> acceptOffer(String offerId) async {
+    try {
+      // Call RPC function to accept offer and create trip
+      final response = await _client.rpc(
+        'accept_ride_offer',
+        params: {'p_offer_id': offerId},
+      );
+
+      if (response.error != null) {
+        throw Exception('Failed to accept offer: ${response.error!.message}');
+      }
+    } catch (e) {
+      throw Exception('Failed to accept offer: $e');
+    }
+  }
+
+  /// Subscribe to driver's trips model (alias for subscribeToDriverTrips)
+  Stream<List<Map<String, dynamic>>> subscribeToDriverTripsModel(String driverId) {
+    return subscribeToDriverTrips(driverId);
+  }
+  /// Fetch driver dashboard data using RPC
+  Future<Map<String, dynamic>?> fetchDriverDashboard(String driverId) async {
+    try {
+      final res = await supabase.rpc('get_driver_dashboard', params: {'p_driver_id': driverId}).maybeSingle();
+      if (res == null) return null;
+      return Map<String, dynamic>.from(res);
+      return (res as Map).cast<String, dynamic>();
+    } catch (e, st) {
+      log('[TripService] Dashboard fetch error: $e\n$st');
+      // log into telemetry table via RPC if you want
+      await supabase.from('telemetry_logs').insert({
+        'type': 'dashboard_error',
+        'message': e.toString(),
+        'meta': {'driver_id': driverId}
+      });
+      return null;
+    }
+  }
+
+  /// Accept offer using atomic RPC
+  Future<String?> acceptOfferAtomic(String offerId, String driverId) async {
+    final res = await supabase.rpc('accept_offer_atomic', params: {'p_offer_id': offerId, 'p_driver_id': driverId}).maybeSingle();
+    if (res == null) return null;
+    if (res.containsKey('trip_id')) return res['trip_id'].toString();
+    return res.toString();
   }
 }

@@ -10,6 +10,7 @@ import 'package:albocarride/screens/auth/auth_wrapper.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
 import 'package:albocarride/screens/auth/signup_page.dart';
 import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
+import 'package:albocarride/screens/auth/vehicle_details_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
@@ -207,6 +208,13 @@ class MyApp extends StatelessWidget {
         '/vehicle-type-selection': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as String?;
           return VehicleTypeSelectionPage(driverId: args ?? '');
+        },
+        '/vehicle-details': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return VehicleDetailsPage(
+            driverId: args?['driverId'] ?? '',
+            vehicleType: args?['vehicleType'] ?? 'car',
+          );
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),

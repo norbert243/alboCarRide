@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 
 class RideHistoryPage extends StatefulWidget {
@@ -263,7 +262,7 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  ..._rideHistory.map(_buildRideCard).toList(),
+                  ..._rideHistory.map(_buildRideCard),
                 ],
               ),
             ),

@@ -8,78 +8,80 @@ class RoleSelectionPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // App Logo/Title
-              const Column(
-                children: [
-                  Icon(
-                    Icons.directions_car,
-                    size: 64,
-                    color: Colors.deepPurple,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'AlboCarRide',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // App Logo/Title
+                const Column(
+                  children: [
+                    Icon(
+                      Icons.directions_car,
+                      size: 64,
                       color: Colors.deepPurple,
                     ),
+                    SizedBox(height: 16),
+                    Text(
+                      'AlboCarRide',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Your ride, your way',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 48),
+                // Title
+                const Text(
+                  'How would you like to use AlboCarRide?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
                   ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Your ride, your way',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                // Role Cards
+                RoleCard(
+                  title: 'Customer',
+                  description: 'Book rides and get to your destination',
+                  icon: Icons.person,
+                  color: Colors.blue,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/signup',
+                    arguments: 'customer',
                   ),
-                ],
-              ),
-              const SizedBox(height: 48),
-              // Title
-              const Text(
-                'How would you like to use AlboCarRide?',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              // Role Cards
-              RoleCard(
-                title: 'Customer',
-                description: 'Book rides and get to your destination',
-                icon: Icons.person,
-                color: Colors.blue,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/signup',
-                  arguments: 'customer',
+                const SizedBox(height: 20),
+                RoleCard(
+                  title: 'Driver',
+                  description: 'Offer rides and earn money',
+                  icon: Icons.directions_car,
+                  color: Colors.green,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    '/signup',
+                    arguments: 'driver',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              RoleCard(
-                title: 'Driver',
-                description: 'Offer rides and earn money',
-                icon: Icons.directions_car,
-                color: Colors.green,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/signup',
-                  arguments: 'driver',
+                const SizedBox(height: 32),
+                // Footer Text
+                const Text(
+                  'Choose your role to get started',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
                 ),
-              ),
-              const SizedBox(height: 32),
-              // Footer Text
-              const Text(
-                'Choose your role to get started',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

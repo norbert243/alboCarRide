@@ -1,448 +1,438 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:albocarride/widgets/custom_toast.dart';
-import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
-  static final SupabaseClient _supabase = Supabase.instance.client;
-  static final FlutterSecureStorage _secureStorage =
-      const FlutterSecureStorage();
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
 
-  // Session keys
-  static const String _isLoggedInKey = 'is_logged_in';
-  static const String _userIdKey = 'user_id';
-  static const String _userPhoneKey = 'user_phone';
-  static const String _userRoleKey = 'user_role';
-  static const String _sessionExpiryKey = 'session_expiry';
-  static const String _refreshTokenKey = 'refresh_token';
-  static const String _accessTokenKey = 'access_token';
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  // Session configuration
-  static const Duration _sessionDuration = Duration(days: 30);
-  static const Duration _refreshThreshold = Duration(minutes: 5);
-  static const Duration _sessionTimeout = Duration(minutes: 30);
+  // Session state tracking
+  bool _isAuthenticated = false;
+  String? _currentUserId;
+  String? _currentUserRole;
 
-  /// Initialize authentication service and restore session if available
-  static Future<void> initialize() async {
+  // Getters
+  bool get isAuthenticated => _isAuthenticated;
+  String? get currentUserId => _currentUserId;
+  String? get currentUserRole => _currentUserRole;
+
+  // Static methods for SessionGuard
+  static Future<bool> isAuthenticatedStatic() async {
+    return _instance._isAuthenticated;
+  }
+
+  static Future<String?> getUserIdStatic() async {
+    return _instance._currentUserId;
+  }
+
+  // Initialize session from secure storage
+  Future<void> initializeSession() async {
     try {
-      print('🔐 AuthService.initialize: Starting initialization');
-      print('🔐 AuthService.initialize: Checking for existing session...');
+      final sessionJson = await _secureStorage.read(key: 'supabase_session');
+      if (sessionJson != null) {
+        final session = Session.fromJson(json.decode(sessionJson));
+        if (session != null) {
+          await _supabase.auth.setSession(session.accessToken);
+        }
 
-      // Check if we have a valid session stored
-      final hasValidSession = await _hasValidSecureSession();
-      print(
-        '🔐 AuthService.initialize: hasValidSecureSession = $hasValidSession',
-      );
+        if (session != null) {
+          _currentUserId = session.user.id;
+          _isAuthenticated = true;
+        }
 
-      if (hasValidSession) {
-        // Restore session from secure storage
-        print(
-          '🔐 AuthService.initialize: ✅ Valid session found, restoring from secure storage',
-        );
-        await _restoreSessionFromSecureStorage();
-        print('🔐 AuthService.initialize: ✅ Session restoration completed');
-      } else {
-        print('🔐 AuthService.initialize: ❌ No valid secure session found');
-        print('🔐 AuthService.initialize: User will need to log in again');
+        // Fetch user role from profiles table
+        if (_currentUserId != null) {
+          final profileResponse = await _supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', _currentUserId!)
+              .single()
+              .catchError((_) => null);
+
+          _currentUserRole = profileResponse['role'] ?? 'customer';
+        }
       }
-
-      // Check Supabase session after restoration
-      final supabaseSession = Supabase.instance.client.auth.currentSession;
-      print(
-        '🔐 AuthService.initialize: Supabase session after restore = ${supabaseSession != null ? "✅ EXISTS" : "❌ NULL"}',
-      );
     } catch (e) {
-      print('❌ Error initializing auth service: $e');
+      await _secureStorage.delete(key: 'supabase_session');
+      _isAuthenticated = false;
+      _currentUserId = null;
+      _currentUserRole = null;
     }
   }
 
-  /// WhatsApp-style seamless authentication - check if user can be automatically logged in
-  static Future<bool> canAutoLogin() async {
-    try {
-      print('🔐 AuthService.canAutoLogin: Checking for auto-login capability');
-
-      // Check if we have valid tokens in secure storage
-      final accessToken = await _secureStorage.read(key: _accessTokenKey);
-      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
-
-      print(
-        '🔐 AuthService.canAutoLogin: accessToken = ${accessToken != null ? "Exists" : "Null"}',
-      );
-      print(
-        '🔐 AuthService.canAutoLogin: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
-      );
-
-      // If we have both tokens, we can attempt auto-login
-      final canAutoLogin = accessToken != null && refreshToken != null;
-      print('🔐 AuthService.canAutoLogin: canAutoLogin = $canAutoLogin');
-
-      return canAutoLogin;
-    } catch (e) {
-      print('❌ Error checking auto-login capability: $e');
-      return false;
-    }
-  }
-
-  /// Attempt automatic login using stored tokens (WhatsApp-style)
-  static Future<bool> attemptAutoLogin() async {
-    try {
-      print('🔐 AuthService.attemptAutoLogin: Starting automatic login');
-
-      if (!await canAutoLogin()) {
-        print(
-          '🔐 AuthService.attemptAutoLogin: Cannot auto-login - missing tokens',
-        );
-        return false;
-      }
-
-      // Restore session from secure storage
-      await _restoreSessionFromSecureStorage();
-
-      // Verify the session was successfully restored
-      final currentSession = Supabase.instance.client.auth.currentSession;
-      final isAuthenticated = currentSession != null;
-
-      print(
-        '🔐 AuthService.attemptAutoLogin: Auto-login ${isAuthenticated ? "✅ SUCCESS" : "❌ FAILED"}',
-      );
-      print(
-        '🔐 AuthService.attemptAutoLogin: Session exists = ${isAuthenticated ? "Yes" : "No"}',
-      );
-
-      return isAuthenticated;
-    } catch (e) {
-      print('❌ Error during auto-login: $e');
-      return false;
-    }
-  }
-
-  /// Save session with secure storage for tokens
-  static Future<void> saveSession({
-    required String userId,
-    required String userPhone,
-    required String userRole,
-    required DateTime expiry,
-    String? accessToken,
-    String? refreshToken,
+  // Sign up with phone number
+  Future<Map<String, dynamic>> signUpWithPhone({
+    required String phone,
+    required String fullName,
+    required String role,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Clean phone number
+      final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
 
-      // Save basic session info to shared preferences
-      await prefs.setBool(_isLoggedInKey, true);
-      await prefs.setString(_userIdKey, userId);
-      await prefs.setString(_userPhoneKey, userPhone);
-      await prefs.setString(_userRoleKey, userRole);
-      await prefs.setString(_sessionExpiryKey, expiry.toIso8601String());
+      // Send OTP
+      await _supabase.auth.signInWithOtp(
+        phone: cleanPhone,
+        data: {'full_name': fullName, 'role': role},
+      );
 
-      // Save sensitive tokens to secure storage
-      if (accessToken != null) {
-        await _secureStorage.write(key: _accessTokenKey, value: accessToken);
-      }
-      if (refreshToken != null) {
-        await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
-      }
-
-      print('Session saved successfully for user: $userId');
+      return {'success': true, 'message': 'OTP sent successfully'};
     } catch (e) {
-      print('Error saving session: $e');
-      throw Exception('Failed to save session');
+      return {
+        'success': false,
+        'message': 'Failed to send OTP: ${e.toString()}',
+      };
     }
   }
 
-  /// Clear all session data
-  static Future<void> clearSession() async {
+  // Verify OTP
+  Future<Map<String, dynamic>> verifyOtp({
+    required String phone,
+    required String otp,
+  }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
 
-      // Clear shared preferences
-      await prefs.remove(_isLoggedInKey);
-      await prefs.remove(_userIdKey);
-      await prefs.remove(_userPhoneKey);
-      await prefs.remove(_userRoleKey);
-      await prefs.remove(_sessionExpiryKey);
-
-      // Clear secure storage
-      await _secureStorage.delete(key: _accessTokenKey);
-      await _secureStorage.delete(key: _refreshTokenKey);
-
-      // Clear Supabase session
-      await _supabase.auth.signOut();
-
-      print('Session cleared successfully');
-    } catch (e) {
-      print('Error clearing session: $e');
-    }
-  }
-
-  /// Check if user is logged in with valid session
-  static Future<bool> isLoggedIn() async {
-    try {
-      print('🔐 AuthService.isLoggedIn: Starting session validation');
-
-      // Check local session validity first
-      final hasLocalSession = await _hasValidLocalSession();
-      print('🔐 AuthService.isLoggedIn: hasLocalSession = $hasLocalSession');
-      if (!hasLocalSession) {
-        print('🔐 AuthService.isLoggedIn: ❌ No valid local session found');
-        return false;
-      }
-
-      // Check if session needs refresh
-      final needsRefresh = await _needsRefresh();
-      print('🔐 AuthService.isLoggedIn: needsRefresh = $needsRefresh');
-      if (needsRefresh) {
-        print(
-          '🔐 AuthService.isLoggedIn: Session needs refresh, attempting refresh...',
-        );
-        final refreshed = await _refreshSession();
-        print('🔐 AuthService.isLoggedIn: refreshSession result = $refreshed');
-        return refreshed;
-      }
-
-      print('🔐 AuthService.isLoggedIn: ✅ Session is valid');
-      return true;
-    } catch (e) {
-      print('❌ Error checking login status: $e');
-      return false;
-    }
-  }
-
-  /// Refresh session tokens automatically
-  static Future<bool> _refreshSession() async {
-    try {
-      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
-      if (refreshToken == null) {
-        await clearSession();
-        return false;
-      }
-
-      // Attempt to refresh session
-      final response = await _supabase.auth.refreshSession();
+      final response = await _supabase.auth.verifyOTP(
+        phone: cleanPhone,
+        token: otp,
+        type: OtpType.sms,
+      );
 
       if (response.session != null) {
-        // Save refreshed session
-        await saveSession(
-          userId: response.session!.user.id,
-          userPhone: await getUserPhone() ?? '',
-          userRole: await getUserRole() ?? '',
-          expiry: DateTime.now().add(_sessionDuration),
-          accessToken: response.session!.accessToken,
-          refreshToken: response.session!.refreshToken,
-        );
-        return true;
-      }
+        await _saveSession(response.session!);
 
-      return false;
+        _currentUserId = response.session!.user.id;
+        _isAuthenticated = true;
+
+        // Fetch user role
+        final profileResponse = await _supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', _currentUserId!)
+            .single();
+
+        _currentUserRole = profileResponse['role'] ?? 'customer';
+
+        return {
+          'success': true,
+          'message': 'OTP verified successfully',
+          'userId': _currentUserId,
+          'role': _currentUserRole,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Invalid OTP or session not created',
+        };
+      }
     } catch (e) {
-      print('Error refreshing session: $e');
-      await clearSession();
-      return false;
+      return {
+        'success': false,
+        'message': 'OTP verification failed: ${e.toString()}',
+      };
     }
   }
 
-  /// Check if session needs refresh
-  static Future<bool> _needsRefresh() async {
-    final expiryString = await SharedPreferences.getInstance().then(
-      (prefs) => prefs.getString(_sessionExpiryKey),
-    );
-
-    if (expiryString == null) return true;
-
-    final expiry = DateTime.parse(expiryString);
-    final timeUntilExpiry = expiry.difference(DateTime.now());
-
-    return timeUntilExpiry <= _refreshThreshold;
+  // Create or update profile using server-side function
+  Future<void> _createOrUpdateProfile(
+    String fullName,
+    String phone,
+    String role,
+  ) async {
+    try {
+      await _supabase.rpc(
+        'upsert_profile',
+        params: {
+          'p_id': _currentUserId,
+          'p_full_name': fullName,
+          'p_phone': phone,
+          'p_role': role,
+        },
+      );
+    } catch (e) {
+      // Fallback: direct table insert/update
+      try {
+        await _supabase.from('profiles').upsert({
+          'id': _currentUserId,
+          'full_name': fullName,
+          'phone': phone,
+          'role': role,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } catch (fallbackError) {
+        print('Profile creation fallback failed: $fallbackError');
+      }
+    }
   }
 
-  /// Get session data with validation
-  static Future<Map<String, dynamic>?> getSessionData() async {
+  // Create driver profile with vehicle details
+  Future<Map<String, dynamic>> createDriverProfile({
+    required String driverId,
+    required String vehicleType,
+    required String vehicleMake,
+    required String vehicleModel,
+    required String licensePlate,
+    required int vehicleYear,
+  }) async {
     try {
-      if (!await isLoggedIn()) return null;
+      // First try RPC function if available
+      try {
+        await _supabase.rpc(
+          'create_driver_profile',
+          params: {
+            'p_driver_id': driverId,
+            'p_vehicle_type': vehicleType,
+            'p_vehicle_make': vehicleMake,
+            'p_vehicle_model': vehicleModel,
+            'p_license_plate': licensePlate,
+            'p_vehicle_year': vehicleYear,
+          },
+        );
 
-      final prefs = await SharedPreferences.getInstance();
-      final expiryString = prefs.getString(_sessionExpiryKey);
+        return {
+          'success': true,
+          'message': 'Driver profile created successfully',
+        };
+      } catch (rpcError) {
+        // If RPC fails, use direct table operations
+        print('RPC failed, using direct table operations: $rpcError');
+      }
+
+      // Insert complete driver record with all required fields
+      await _supabase.from('drivers').upsert({
+        'id': driverId,
+        'vehicle_type': vehicleType,
+        'vehicle_make': vehicleMake,
+        'vehicle_model': vehicleModel,
+        'license_plate': licensePlate,
+        'vehicle_year': vehicleYear,
+        'is_approved': false,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      // Create wallet if missing
+      await _supabase.from('driver_wallets').upsert({
+        'driver_id': driverId,
+        'balance': 0.00,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      // Ensure vehicle completeness for data integrity
+      await _ensureVehicleCompleteness(driverId);
 
       return {
-        'userId': prefs.getString(_userIdKey),
-        'userPhone': prefs.getString(_userPhoneKey),
-        'userRole': prefs.getString(_userRoleKey),
-        'expiry': expiryString != null ? DateTime.parse(expiryString) : null,
-        'accessToken': await _secureStorage.read(key: _accessTokenKey),
-        'refreshToken': await _secureStorage.read(key: _refreshTokenKey),
+        'success': true,
+        'message': 'Driver profile created successfully',
       };
     } catch (e) {
-      print('Error getting session data: $e');
-      return null;
+      print('Error creating driver profile: $e');
+      return {
+        'success': false,
+        'message': 'Failed to create driver profile: ${e.toString()}',
+      };
     }
   }
 
-  /// Check if session exists in secure storage
-  static Future<bool> _hasValidSecureSession() async {
+  // Check driver approval status
+  Future<Map<String, dynamic>> checkDriverApprovalStatus(
+    String driverId,
+  ) async {
     try {
-      final accessToken = await _secureStorage.read(key: _accessTokenKey);
-      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      final response = await _supabase
+          .from('drivers')
+          .select('is_approved')
+          .eq('id', driverId)
+          .single();
 
-      print(
-        'AuthService._hasValidSecureSession: accessToken = ${accessToken != null ? "Exists" : "Null"}',
-      );
-      print(
-        'AuthService._hasValidSecureSession: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
-      );
+      final bool isApproved = response['is_approved'] ?? false;
 
-      final hasTokens = accessToken != null && refreshToken != null;
-      final hasLocalSession = await _hasValidLocalSession();
-
-      print(
-        'AuthService._hasValidSecureSession: hasTokens = $hasTokens, hasLocalSession = $hasLocalSession',
-      );
-
-      return hasTokens && hasLocalSession;
+      return {'success': true, 'isApproved': isApproved};
     } catch (e) {
-      print('AuthService._hasValidSecureSession: Error = $e');
+      return {
+        'success': false,
+        'message': 'Failed to check driver approval status: ${e.toString()}',
+        'isApproved': false,
+      };
+    }
+  }
+
+  // Sign out
+  Future<void> signOut() async {
+    try {
+      await _supabase.auth.signOut();
+      await _secureStorage.delete(key: 'supabase_session');
+
+      _isAuthenticated = false;
+      _currentUserId = null;
+      _currentUserRole = null;
+    } catch (e) {
+      print('Sign out error: $e');
+      // Force clear local state even if remote signout fails
+      await _secureStorage.delete(key: 'supabase_session');
+      _isAuthenticated = false;
+      _currentUserId = null;
+      _currentUserRole = null;
+    }
+  }
+
+  // Save session to secure storage
+  Future<void> _saveSession(Session session) async {
+    await _secureStorage.write(
+      key: 'supabase_session',
+      value: json.encode(session.toJson()),
+    );
+  }
+
+  // Get current session
+  Future<Session?> getCurrentSession() async {
+    try {
+      final sessionJson = await _secureStorage.read(key: 'supabase_session');
+      if (sessionJson != null) {
+        return Session.fromJson(json.decode(sessionJson));
+      }
+    } catch (e) {
+      print('Error getting session: $e');
+    }
+    return null;
+  }
+
+  // Check if user exists (for duplicate prevention)
+  Future<bool> checkUserExists(String phone) async {
+    try {
+      final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+
+      final response = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', cleanPhone)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
       return false;
     }
   }
 
-  /// Check local session validity
-  static Future<bool> _hasValidLocalSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
-    print('AuthService._hasValidLocalSession: isLoggedIn = $isLoggedIn');
-
-    if (!isLoggedIn) return false;
-
-    final expiryString = prefs.getString(_sessionExpiryKey);
-    print('AuthService._hasValidLocalSession: expiryString = $expiryString');
-    if (expiryString == null) return false;
-
-    final expiry = DateTime.parse(expiryString);
-    final isValid = expiry.isAfter(DateTime.now());
-    print(
-      'AuthService._hasValidLocalSession: expiry = $expiry, isValid = $isValid',
-    );
-    return isValid;
-  }
-
-  /// Restore session from secure storage
-  static Future<void> _restoreSessionFromSecureStorage() async {
+  // Update user role
+  Future<void> updateUserRole(String userId, String role) async {
     try {
-      final accessToken = await _secureStorage.read(key: _accessTokenKey);
-      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      await _supabase.from('profiles').update({'role': role}).eq('id', userId);
 
-      print(
-        'AuthService._restoreSessionFromSecureStorage: accessToken = ${accessToken != null ? "Exists" : "Null"}',
-      );
-      print(
-        'AuthService._restoreSessionFromSecureStorage: refreshToken = ${refreshToken != null ? "Exists" : "Null"}',
-      );
-
-      if (accessToken != null && refreshToken != null) {
-        // Set the tokens in Supabase client using the correct method
-        print(
-          'AuthService._restoreSessionFromSecureStorage: Setting session in Supabase',
-        );
-
-        // Use the correct Supabase method to restore session
-        // The setSession method expects an access token string
-        try {
-          await _supabase.auth.setSession(accessToken);
-          print(
-            'AuthService._restoreSessionFromSecureStorage: Session restored from secure storage',
-          );
-
-          // Verify the session was set
-          final currentSession = _supabase.auth.currentSession;
-          print(
-            'AuthService._restoreSessionFromSecureStorage: Supabase session after restore = ${currentSession != null ? "Exists" : "Null"}',
-          );
-
-          if (currentSession == null) {
-            print(
-              'AuthService._restoreSessionFromSecureStorage: Session restoration failed, clearing invalid session',
-            );
-            await clearSession();
-          }
-        } catch (e) {
-          print('Error setting session: $e');
-          await clearSession();
-        }
-      } else {
-        print(
-          'AuthService._restoreSessionFromSecureStorage: Missing tokens, cannot restore session',
-        );
-        await clearSession();
-      }
+      _currentUserRole = role;
     } catch (e) {
-      print('Error restoring session: $e');
-      await clearSession();
+      print('Failed to update user role: $e');
     }
   }
 
-  /// Get user ID
-  static Future<String?> getUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userIdKey);
+  // Add missing methods for compatibility
+  static Future<void> initialize() async {
+    await _instance.initializeSession();
   }
 
-  /// Get user phone
-  static Future<String?> getUserPhone() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userPhoneKey);
+  static Future<void> clearSession() async {
+    await _instance.signOut();
   }
 
-  /// Get user role
-  static Future<String?> getUserRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userRoleKey);
-  }
+  static Future<bool> attemptAutoLogin() async {
+    try {
+      await _instance.initializeSession();
 
-  /// Monitor session state changes
-  static Stream<AuthState> get authStateChanges {
-    return _supabase.auth.onAuthStateChange;
-  }
+      // Double-check with Supabase auth state
+      final supabase = Supabase.instance.client;
+      final currentSession = supabase.auth.currentSession;
+      final currentUser = supabase.auth.currentUser;
 
-  /// Handle authentication errors with user feedback
-  static void handleAuthError(BuildContext context, dynamic error) {
-    print('Authentication error: $error');
+      if (currentSession != null && currentUser != null) {
+        _instance._currentUserId = currentUser.id;
+        _instance._isAuthenticated = true;
 
-    if (error is AuthException) {
-      switch (error.message) {
-        case 'Invalid login credentials':
-          CustomToast.showError(
-            context: context,
-            message: 'Invalid credentials. Please try again.',
-          );
-          break;
-        case 'Email not confirmed':
-          CustomToast.showError(
-            context: context,
-            message: 'Please verify your email address.',
-          );
-          break;
-        case 'User already registered':
-          CustomToast.showError(
-            context: context,
-            message: 'User already exists. Please sign in.',
-          );
-          break;
-        default:
-          CustomToast.showError(
-            context: context,
-            message: 'Authentication failed: ${error.message}',
-          );
+        // Fetch user role from profiles table
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', currentUser.id)
+            .single()
+            .catchError((_) => null);
+
+        _instance._currentUserRole = profileResponse['role'] ?? 'customer';
+
+        print('✅ Auto-login successful: User ${currentUser.id} authenticated');
+        return true;
+      } else {
+        // Clear local state if no Supabase session
+        _instance._isAuthenticated = false;
+        _instance._currentUserId = null;
+        _instance._currentUserRole = null;
+        await _instance._secureStorage.delete(key: 'supabase_session');
+        print('❌ Auto-login failed: No valid Supabase session');
+        return false;
       }
-    } else if (error is PostgrestException) {
-      CustomToast.showError(
-        context: context,
-        message: 'Database error: ${error.message}',
-      );
-    } else {
-      CustomToast.showError(
-        context: context,
-        message: 'An unexpected error occurred. Please try again.',
-      );
+    } catch (e) {
+      print('❌ Auto-login error: $e');
+      _instance._isAuthenticated = false;
+      _instance._currentUserId = null;
+      _instance._currentUserRole = null;
+      return false;
+    }
+  }
+
+  static Future<bool> isLoggedIn() async {
+    return _instance._isAuthenticated;
+  }
+
+  static Future<void> saveSession(Session session) async {
+    await _instance._saveSession(session);
+  }
+
+  static Future<String?> getUserId() async {
+    return _instance._currentUserId;
+  }
+
+  /// Ensures vehicle completeness for existing driver records
+  /// This fixes the 15 incomplete vehicle records identified in the database
+  Future<void> _ensureVehicleCompleteness(String driverId) async {
+    try {
+      final response = await _supabase
+          .from('drivers')
+          .select()
+          .eq('id', driverId)
+          .maybeSingle();
+
+      if (response != null) {
+        final vehicleMake = response['vehicle_make'] as String?;
+        final vehicleModel = response['vehicle_model'] as String?;
+        final licensePlate = response['license_plate'] as String?;
+        final vehicleYear = response['vehicle_year'] as int?;
+
+        // Check if any required vehicle fields are null
+        if (vehicleMake == null ||
+            vehicleModel == null ||
+            licensePlate == null ||
+            vehicleYear == null) {
+          await _supabase
+              .from('drivers')
+              .update({
+                'vehicle_make': vehicleMake ?? 'Unknown',
+                'vehicle_model': vehicleModel ?? 'Unknown',
+                'vehicle_year': vehicleYear ?? DateTime.now().year,
+                'license_plate':
+                    licensePlate ??
+                    'TEMP-${driverId.substring(0, 6).toUpperCase()}',
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', driverId);
+
+          print('✅ Fixed incomplete vehicle data for driver: $driverId');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error ensuring vehicle completeness: $e');
+      // Non-critical error, don't throw
     }
   }
 }

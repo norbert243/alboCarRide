@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/services/payment_service.dart';
 
@@ -302,9 +301,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              ..._paymentHistory
-                                  .map(_buildPaymentCard)
-                                  .toList(),
+                              ..._paymentHistory.map(_buildPaymentCard),
                             ],
                           ),
                         ),

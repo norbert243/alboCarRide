@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class WaitingForReviewPage extends StatelessWidget {
-  const WaitingForReviewPage({Key? key}) : super(key: key);
+  const WaitingForReviewPage({super.key});
 
   @override
   Widget build(BuildContext context) {

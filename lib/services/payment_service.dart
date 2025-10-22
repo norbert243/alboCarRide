@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
-
 class PaymentService {
   /// Create a payment intent for a ride
   static Future<Map<String, dynamic>?> createPaymentIntent({

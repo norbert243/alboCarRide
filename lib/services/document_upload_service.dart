@@ -11,6 +11,7 @@ enum DocumentType {
   vehicleRegistration,
   profilePhoto,
   vehiclePhoto,
+  depositProof,
 }
 
 /// Service for handling document uploads with compression and Supabase storage
@@ -36,6 +37,29 @@ class DocumentUploadService {
     String? customFileName,
   }) async {
     try {
+      // Check if user is authenticated
+      final currentSession = _supabase.auth.currentSession;
+      if (currentSession == null) {
+        throw Exception('User not authenticated. Please sign in first.');
+      }
+
+      // Verify the userId matches the authenticated user
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser?.id != userId) {
+        throw Exception('User ID mismatch. Cannot upload documents for another user.');
+      }
+
+      // Check if user exists in profiles table
+      final profileResponse = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (profileResponse == null) {
+        throw Exception('User profile not found. Please complete registration first.');
+      }
+
       // Validate file size before processing
       final fileSize = await file.length();
       if (fileSize > _maxFileSize) {
@@ -68,11 +92,14 @@ class DocumentUploadService {
           .from(_storageBucket)
           .getPublicUrl(storagePath);
 
+      print('✅ Document uploaded successfully: $storagePath');
       return publicUrl;
     } catch (e) {
       if (e is StorageException) {
+        print('❌ Storage upload failed: ${e.message}');
         throw Exception('Storage upload failed: ${e.message}');
       }
+      print('❌ Document upload error: $e');
       rethrow;
     }
   }
@@ -85,6 +112,29 @@ class DocumentUploadService {
     String? customFileName,
   }) async {
     try {
+      // Check if user is authenticated
+      final currentSession = _supabase.auth.currentSession;
+      if (currentSession == null) {
+        throw Exception('User not authenticated. Please sign in first.');
+      }
+
+      // Verify the userId matches the authenticated user
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser?.id != userId) {
+        throw Exception('User ID mismatch. Cannot upload documents for another user.');
+      }
+
+      // Check if user exists in profiles table
+      final profileResponse = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (profileResponse == null) {
+        throw Exception('User profile not found. Please complete registration first.');
+      }
+
       final XFile? pickedFile = await _imagePicker.pickImage(
         source: source,
         maxWidth: _targetWidth.toDouble(),
@@ -103,6 +153,7 @@ class DocumentUploadService {
         customFileName: customFileName,
       );
     } catch (e) {
+      print('❌ Failed to pick and upload document: $e');
       throw Exception('Failed to pick and upload document: $e');
     }
   }
@@ -290,6 +341,8 @@ extension DocumentTypeExtension on DocumentType {
         return 'Profile Photo';
       case DocumentType.vehiclePhoto:
         return 'Vehicle Photo';
+      case DocumentType.depositProof:
+        return 'Deposit Proof';
     }
   }
 
@@ -303,6 +356,8 @@ extension DocumentTypeExtension on DocumentType {
         return 'Upload a clear profile photo for identification';
       case DocumentType.vehiclePhoto:
         return 'Upload photos showing your vehicle from multiple angles';
+      case DocumentType.depositProof:
+        return 'Upload proof of your deposit payment';
     }
   }
 
@@ -313,6 +368,7 @@ extension DocumentTypeExtension on DocumentType {
         return true;
       case DocumentType.profilePhoto:
       case DocumentType.vehiclePhoto:
+      case DocumentType.depositProof:
         return false;
     }
   }

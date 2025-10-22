@@ -42,11 +42,9 @@ class _SupportPageState extends State<SupportPage> {
             .eq('id', _customerId!)
             .single();
 
-        if (response != null) {
-          setState(() {
-            _customerName = response['full_name'];
-          });
-        }
+        setState(() {
+          _customerName = response['full_name'];
+        });
       }
     } catch (e) {
       print('Error loading customer info: $e');

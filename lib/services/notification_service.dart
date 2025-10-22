@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/api_config.dart';
 
 class NotificationService {
   /// Send notification to drivers about new ride request
@@ -72,58 +71,56 @@ class NotificationService {
           .eq('id', customerId)
           .single();
 
-      if (response != null) {
-        final customerName = response['full_name'];
-        final customerPhone = response['phone'];
+      final customerName = response['full_name'];
+      final customerPhone = response['phone'];
 
-        String message;
-        String title;
+      String message;
+      String title;
 
-        switch (status) {
-          case 'accepted':
-            title = 'Ride Accepted!';
-            message =
-                'Driver $driverName has accepted your ride request. Estimated arrival: $estimatedArrival';
-            break;
-          case 'arrived':
-            title = 'Driver Arrived';
-            message = 'Driver $driverName has arrived at your pickup location';
-            break;
-          case 'in_progress':
-            title = 'Ride Started';
-            message = 'Your ride with $driverName has started';
-            break;
-          case 'completed':
-            title = 'Ride Completed';
-            message =
-                'Your ride has been completed. Fare: \$${fare?.toStringAsFixed(2)}';
-            break;
-          case 'cancelled':
-            title = 'Ride Cancelled';
-            message = 'Your ride has been cancelled';
-            break;
-          default:
-            title = 'Ride Update';
-            message = 'Your ride status has been updated to: $status';
-        }
-
-        // Send push notification (simulated)
-        await _sendPushNotification(
-          driverId: customerId,
-          title: title,
-          body: message,
-        );
-
-        // Send SMS notification
-        await _sendSmsNotification(
-          phoneNumber: customerPhone,
-          message: '$title: $message',
-        );
-
-        print(
-          'Sent notification to customer $customerName about ride $rideId: $status',
-        );
+      switch (status) {
+        case 'accepted':
+          title = 'Ride Accepted!';
+          message =
+              'Driver $driverName has accepted your ride request. Estimated arrival: $estimatedArrival';
+          break;
+        case 'arrived':
+          title = 'Driver Arrived';
+          message = 'Driver $driverName has arrived at your pickup location';
+          break;
+        case 'in_progress':
+          title = 'Ride Started';
+          message = 'Your ride with $driverName has started';
+          break;
+        case 'completed':
+          title = 'Ride Completed';
+          message =
+              'Your ride has been completed. Fare: \$${fare?.toStringAsFixed(2)}';
+          break;
+        case 'cancelled':
+          title = 'Ride Cancelled';
+          message = 'Your ride has been cancelled';
+          break;
+        default:
+          title = 'Ride Update';
+          message = 'Your ride status has been updated to: $status';
       }
+
+      // Send push notification (simulated)
+      await _sendPushNotification(
+        driverId: customerId,
+        title: title,
+        body: message,
+      );
+
+      // Send SMS notification
+      await _sendSmsNotification(
+        phoneNumber: customerPhone,
+        message: '$title: $message',
+      );
+
+      print(
+        'Sent notification to customer $customerName about ride $rideId: $status',
+      );
     } catch (e) {
       print('Error notifying customer: $e');
     }
@@ -146,28 +143,26 @@ class NotificationService {
           .eq('id', driverId)
           .single();
 
-      if (response != null) {
-        final driverPhone = response['phone'];
+      final driverPhone = response['phone'];
 
-        final title = 'New Ride Assignment';
-        final message =
-            'You have been assigned a ride for $customerName from $pickupLocation to $dropoffLocation. Fare: \$${fare.toStringAsFixed(2)}';
+      final title = 'New Ride Assignment';
+      final message =
+          'You have been assigned a ride for $customerName from $pickupLocation to $dropoffLocation. Fare: \$${fare.toStringAsFixed(2)}';
 
-        // Send push notification (simulated)
-        await _sendPushNotification(
-          driverId: driverId,
-          title: title,
-          body: message,
-        );
+      // Send push notification (simulated)
+      await _sendPushNotification(
+        driverId: driverId,
+        title: title,
+        body: message,
+      );
 
-        // Send SMS notification
-        await _sendSmsNotification(
-          phoneNumber: driverPhone,
-          message: '$title: $message',
-        );
+      // Send SMS notification
+      await _sendSmsNotification(
+        phoneNumber: driverPhone,
+        message: '$title: $message',
+      );
 
-        print('Sent ride assignment notification to driver $driverId');
-      }
+      print('Sent ride assignment notification to driver $driverId');
     } catch (e) {
       print('Error notifying driver about assignment: $e');
     }
@@ -216,7 +211,7 @@ class NotificationService {
         .eq('id', rideId)
         .map((data) {
           if (data.isNotEmpty) {
-            return data.first as Map<String, dynamic>;
+            return data.first;
           }
           return {};
         });
@@ -232,7 +227,7 @@ class NotificationService {
         .eq('driver_id', driverId)
         .map((data) {
           if (data.isNotEmpty) {
-            return data.first as Map<String, dynamic>;
+            return data.first;
           }
           return {};
         });

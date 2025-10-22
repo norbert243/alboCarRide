@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 
 class VehicleTypeSelectionPage extends StatefulWidget {
   final String driverId;
-  const VehicleTypeSelectionPage({Key? key, required this.driverId})
-    : super(key: key);
+  const VehicleTypeSelectionPage({super.key, required this.driverId});
 
   @override
   State<VehicleTypeSelectionPage> createState() =>
@@ -14,7 +12,7 @@ class VehicleTypeSelectionPage extends StatefulWidget {
 
 class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
   String? _vehicleType; // 'car' or 'motorcycle'
-  bool _loading = false;
+  final bool _loading = false;
 
   Future<void> _saveVehicleType() async {
     if (_vehicleType == null) {
@@ -25,37 +23,13 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
       return;
     }
 
-    setState(() => _loading = true);
-    final supabase = Supabase.instance.client;
-
-    try {
-      final response = await supabase.from('drivers').upsert({
-        'id': widget.driverId,
-        'vehicle_type': _vehicleType,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).select();
-
-      if (response.isEmpty) {
-        throw Exception('Failed to save vehicle type: No data returned');
-      }
-
-      CustomToast.showSuccess(
-        context: context,
-        message: 'Vehicle type saved successfully!',
-      );
-
-      // Navigate to AuthWrapper to determine next step
-      Navigator.pushNamed(context, '/auth_wrapper');
-    } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to save vehicle type: $e',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+    // Navigate to vehicle details page with selected vehicle type
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/vehicle-details',
+      (route) => false,
+      arguments: {'driverId': widget.driverId, 'vehicleType': _vehicleType!},
+    );
   }
 
   @override
@@ -126,7 +100,7 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _loading ? null : _saveVehicleType,
+                  onPressed: _saveVehicleType,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
@@ -136,22 +110,10 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
                     ),
                     elevation: 2,
                   ),
-                  child: _loading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Save and Continue',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                  child: const Text(
+                    'Save and Continue',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
