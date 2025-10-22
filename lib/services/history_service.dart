@@ -15,6 +15,12 @@ class HistoryService {
     int offset = 0,
     String? status,
   }) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot fetch trips for another user');
+    }
+
     try {
       var query = _supabase
           .from('trips')
@@ -42,6 +48,12 @@ class HistoryService {
     int limit = 20,
     int offset = 0,
   }) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot fetch earnings for another user');
+    }
+
     try {
       final res = await _supabase
           .from('driver_earnings')
@@ -62,6 +74,12 @@ class HistoryService {
 
   /// Get earnings summary for driver (total, this week, this month)
   Future<Map<String, dynamic>> getEarningsSummary(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot fetch earnings summary for another user');
+    }
+
     try {
       final response = await _supabase.rpc(
         'get_driver_earnings_summary',
@@ -86,6 +104,12 @@ class HistoryService {
 
   /// Get trip statistics for driver
   Future<Map<String, dynamic>> getTripStats(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot fetch trip stats for another user');
+    }
+
     try {
       final response = await _supabase.rpc(
         'get_driver_trip_stats',

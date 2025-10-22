@@ -30,6 +30,7 @@ class DocumentUploadService {
       _imagePicker = ImagePicker();
 
   /// Uploads a document from file with automatic compression
+  /// Returns the document record ID from the database
   Future<String> uploadDocument({
     required XFile file,
     required String userId,
@@ -46,18 +47,9 @@ class DocumentUploadService {
       // Verify the userId matches the authenticated user
       final currentUser = _supabase.auth.currentUser;
       if (currentUser?.id != userId) {
-        throw Exception('User ID mismatch. Cannot upload documents for another user.');
-      }
-
-      // Check if user exists in profiles table
-      final profileResponse = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle();
-
-      if (profileResponse == null) {
-        throw Exception('User profile not found. Please complete registration first.');
+        throw Exception(
+          'User ID mismatch. Cannot upload documents for another user.',
+        );
       }
 
       // Validate file size before processing
@@ -73,9 +65,12 @@ class DocumentUploadService {
       final fileName =
           customFileName ?? _generateFileName(userId, documentType, file.name);
 
-      // Upload to Supabase storage
-      final storagePath = '${documentType.name}/$userId/$fileName';
+      // IMPORTANT: Storage path must start with userId for RLS policies
+      final storagePath = '$userId/${documentType.name}/$fileName';
 
+      print('📤 Uploading to: $storagePath');
+
+      // Upload to Supabase storage
       await _supabase.storage
           .from(_storageBucket)
           .uploadBinary(
@@ -92,12 +87,35 @@ class DocumentUploadService {
           .from(_storageBucket)
           .getPublicUrl(storagePath);
 
-      print('✅ Document uploaded successfully: $storagePath');
-      return publicUrl;
+      print('✅ Storage upload successful: $storagePath');
+      print('🔗 Public URL: $publicUrl');
+
+      // Insert record into driver_documents table
+      print('💾 Inserting database record...');
+
+      final response = await _supabase
+          .from('driver_documents')
+          .insert({
+            'driver_id': userId,
+            'document_type': documentType.name,
+            'document_url': publicUrl,
+            'status': 'pending',
+          })
+          .select('id')
+          .single();
+
+      final documentId = response['id'] as String;
+
+      print('✅ Database record created: $documentId');
+      return documentId;
     } catch (e) {
       if (e is StorageException) {
         print('❌ Storage upload failed: ${e.message}');
         throw Exception('Storage upload failed: ${e.message}');
+      } else if (e is PostgrestException) {
+        print('❌ Database insert failed: ${e.message}');
+        print('💡 Code: ${e.code}, Details: ${e.details}');
+        throw Exception('Database insert failed: ${e.message}');
       }
       print('❌ Document upload error: $e');
       rethrow;
@@ -121,18 +139,9 @@ class DocumentUploadService {
       // Verify the userId matches the authenticated user
       final currentUser = _supabase.auth.currentUser;
       if (currentUser?.id != userId) {
-        throw Exception('User ID mismatch. Cannot upload documents for another user.');
-      }
-
-      // Check if user exists in profiles table
-      final profileResponse = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle();
-
-      if (profileResponse == null) {
-        throw Exception('User profile not found. Please complete registration first.');
+        throw Exception(
+          'User ID mismatch. Cannot upload documents for another user.',
+        );
       }
 
       final XFile? pickedFile = await _imagePicker.pickImage(
@@ -154,7 +163,7 @@ class DocumentUploadService {
       );
     } catch (e) {
       print('❌ Failed to pick and upload document: $e');
-      throw Exception('Failed to pick and upload document: $e');
+      rethrow;
     }
   }
 
@@ -171,34 +180,29 @@ class DocumentUploadService {
     }
   }
 
-  /// Deletes a document from storage
-  Future<void> deleteDocument(String storagePath) async {
+  /// Deletes a document from storage and database
+  Future<void> deleteDocument(String documentId, String storagePath) async {
     try {
+      // Delete from storage
       await _supabase.storage.from(_storageBucket).remove([storagePath]);
+
+      // Delete from database
+      await _supabase.from('driver_documents').delete().eq('id', documentId);
     } catch (e) {
       throw Exception('Failed to delete document: $e');
     }
   }
 
-  /// Lists all documents for a user
+  /// Lists all documents for a user from the database
   Future<List<Map<String, dynamic>>> listUserDocuments(String userId) async {
     try {
-      final response = await _supabase.storage
-          .from(_storageBucket)
-          .list(path: userId);
+      final response = await _supabase
+          .from('driver_documents')
+          .select('*')
+          .eq('driver_id', userId)
+          .order('uploaded_at', ascending: false);
 
-      // Convert FileObject list to Map list for compatibility
-      return response
-          .map(
-            (file) => {
-              'name': file.name,
-              'id': file.id,
-              'updated_at': file.updatedAt,
-              'created_at': file.createdAt,
-              'metadata': file.metadata,
-            },
-          )
-          .toList();
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Failed to list documents: $e');
     }
@@ -238,6 +242,7 @@ class DocumentUploadService {
       return compressedBytes;
     } catch (e) {
       // Fallback to original file if compression fails
+      print('⚠️ Compression failed, using original: $e');
       return await file.readAsBytes();
     }
   }
@@ -252,7 +257,13 @@ class DocumentUploadService {
     final extension = path.extension(originalName);
     final baseName = path.basenameWithoutExtension(originalName);
 
-    return '${documentType.name}_${baseName}_$userId$timestamp$extension';
+    // Sanitize basename to avoid issues
+    final sanitizedBaseName = baseName.replaceAll(
+      RegExp(r'[^a-zA-Z0-9_-]'),
+      '_',
+    );
+
+    return '${documentType.name}_${sanitizedBaseName}_$timestamp$extension';
   }
 
   /// Gets MIME type from file extension

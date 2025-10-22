@@ -60,7 +60,7 @@ class _SessionDebugPageState extends State<SessionDebugPage> {
   Future<void> _checkSessionValidity() async {
     setState(() => _isLoading = true);
     try {
-      final isValid = await SessionService.hasValidSessionStatic();
+      final isValid = await SessionService.hasValidSession();
       _showSnackBar('Session validity: $isValid');
       await _loadDebugReport();
     } catch (e) {

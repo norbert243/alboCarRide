@@ -89,6 +89,12 @@ class TripService {
 
   /// Get active trip for a driver
   Future<Map<String, dynamic>?> getActiveTrip(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot access active trip for another user');
+    }
+
     try {
       final response = await _client
           .from('trips')
@@ -143,6 +149,12 @@ class TripService {
 
   /// Subscribe to driver's active trips
   Stream<List<Map<String, dynamic>>> subscribeToDriverTrips(String driverId) {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot subscribe to trips for another user');
+    }
+
     return _client
         .from('trips')
         .stream(primaryKey: ['id'])
@@ -164,6 +176,12 @@ class TripService {
     String driverId, {
     int limit = 20,
   }) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot access trip history for another user');
+    }
+
     try {
       final response = await _client
           .from('trips')
@@ -232,23 +250,39 @@ class TripService {
   }
 
   /// Subscribe to driver's trips model (alias for subscribeToDriverTrips)
-  Stream<List<Map<String, dynamic>>> subscribeToDriverTripsModel(String driverId) {
+  Stream<List<Map<String, dynamic>>> subscribeToDriverTripsModel(
+    String driverId,
+  ) {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot subscribe to trips model for another user');
+    }
+
     return subscribeToDriverTrips(driverId);
   }
+
   /// Fetch driver dashboard data using RPC
   Future<Map<String, dynamic>?> fetchDriverDashboard(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot access dashboard for another user');
+    }
+
     try {
-      final res = await supabase.rpc('get_driver_dashboard', params: {'p_driver_id': driverId}).maybeSingle();
+      final res = await supabase
+          .rpc('get_driver_dashboard', params: {'p_driver_id': driverId})
+          .maybeSingle();
       if (res == null) return null;
       return Map<String, dynamic>.from(res);
-      return (res as Map).cast<String, dynamic>();
     } catch (e, st) {
       log('[TripService] Dashboard fetch error: $e\n$st');
       // log into telemetry table via RPC if you want
       await supabase.from('telemetry_logs').insert({
         'type': 'dashboard_error',
         'message': e.toString(),
-        'meta': {'driver_id': driverId}
+        'meta': {'driver_id': driverId},
       });
       return null;
     }
@@ -256,7 +290,18 @@ class TripService {
 
   /// Accept offer using atomic RPC
   Future<String?> acceptOfferAtomic(String offerId, String driverId) async {
-    final res = await supabase.rpc('accept_offer_atomic', params: {'p_offer_id': offerId, 'p_driver_id': driverId}).maybeSingle();
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _client.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot accept offers for another user');
+    }
+
+    final res = await supabase
+        .rpc(
+          'accept_offer_atomic',
+          params: {'p_offer_id': offerId, 'p_driver_id': driverId},
+        )
+        .maybeSingle();
     if (res == null) return null;
     if (res.containsKey('trip_id')) return res['trip_id'].toString();
     return res.toString();

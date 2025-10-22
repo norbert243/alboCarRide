@@ -28,9 +28,13 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
       context,
       '/vehicle-details',
       (route) => false,
-      arguments: {'driverId': widget.driverId, 'vehicleType': _vehicleType!},
+      arguments: {
+        'driverId': widget.driverId,
+        'vehicleType': _vehicleType!,
+      },
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -111,9 +115,12 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
                     elevation: 2,
                   ),
                   child: const Text(
-                    'Save and Continue',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
+                          'Save and Continue',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 20),

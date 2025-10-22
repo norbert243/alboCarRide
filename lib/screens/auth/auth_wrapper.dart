@@ -16,116 +16,46 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndRoute();
-    });
+    _initAuthCheck();
   }
 
-  Future<void> _checkAndRoute() async {
-    try {
-      print('🔐 AuthWrapper: Starting authentication check');
-
-      // Wait for Supabase auth state to be ready
-      await Future.delayed(const Duration(milliseconds: 500));
-      print('🔐 AuthWrapper: Supabase initialization delay completed');
-
-      // WhatsApp-style: Attempt automatic login first
-      print('🔐 AuthWrapper: Attempting WhatsApp-style auto-login...');
-      final autoLoginSuccess = await AuthService.attemptAutoLogin();
-      print('🔐 AuthWrapper: Auto-login result = $autoLoginSuccess');
-
-      if (autoLoginSuccess) {
-        print(
-          '🔐 AuthWrapper: ✅ WhatsApp-style auto-login successful, routing to homepage',
-        );
-        await _routeBasedOnUserRole();
-        return;
-      }
-
-      // Check if user has a valid session stored locally
-      print('🔐 AuthWrapper: Checking local session storage...');
-      final hasValidSession = await AuthService.isLoggedIn();
-      print('🔐 AuthWrapper: hasValidSession = $hasValidSession');
-
-      if (hasValidSession) {
-        print(
-          '🔐 AuthWrapper: ✅ User has valid session, skipping role selection',
-        );
-        await _routeBasedOnUserRole();
-        return;
-      }
-
-      // If no local session, check Supabase auth
-      print('🔐 AuthWrapper: No local session found, checking Supabase...');
-      final session = _supabase.auth.currentSession;
-      print(
-        '🔐 AuthWrapper: Supabase session = ${session != null ? "✅ EXISTS" : "❌ NULL"}',
-      );
-
-      if (session == null) {
-        // Not authenticated -> show role selection / login
-        print(
-          '🔐 AuthWrapper: ❌ No session found, navigating to role selection',
-        );
-        _navigateToRoleSelection();
-        return;
-      }
-
-      // User has Supabase session but no local session - save it
-      print(
-        '🔐 AuthWrapper: ✅ Supabase session exists but no local session, saving session',
-      );
-      await _saveSessionAndRoute();
-    } catch (e) {
-      print('❌ Error in AuthWrapper routing: $e');
-      // Fallback to role selection on error
-      _navigateToRoleSelection();
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _saveSessionAndRoute() async {
-    try {
-      final user = _supabase.auth.currentUser!;
-      debugPrint('AuthWrapper: Current user ID = ${user.id}');
-
-      // Fetch profile to get user role
-      final profileResponse = await _supabase
-          .from('profiles')
-          .select()
-          .eq('id', user.id);
-
-      if (profileResponse.isEmpty) {
-        debugPrint(
-          'AuthWrapper: No profile found for user, navigating to signup',
-        );
-        // No profile yet -> route to signup
-        _navigateToSignup();
-        return;
-      }
-
-      final profile = profileResponse.first;
-      final role = profile['role'] as String? ?? 'customer';
-      final userPhone = user.phone ?? user.email ?? '';
-      debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
-
-      // Save session for future use
-      await AuthService.saveSession(_supabase.auth.currentSession!);
-
-      debugPrint(
-        'AuthWrapper: Session saved for user: ${user.id} with role: $role',
-      );
-
-      // Route based on user role
+  Future<void> _initAuthCheck() async {
+    // Session integrity check - verify tokens exist before attempting restoration
+    final sessionCheck = await AuthService().canAutoLogin();
+    print('🔐 AuthWrapper Session Integrity Check Results:');
+    print('  accessToken = ${sessionCheck['accessTokenExists'] ? "Exists" : "Missing"}');
+    print('  refreshToken = ${sessionCheck['refreshTokenExists'] ? "Exists" : "Missing"}');
+    print('  canAutoLogin = ${sessionCheck['canAutoLogin']}');
+    
+    // first try to restore secure tokens and rehydrate supabase session
+    final restored = await AuthService().restoreSessionFromSecureStorage();
+    if (restored) {
+      setState(() {
+        _isLoading = false;
+      });
       await _routeBasedOnUserRole();
-    } catch (e) {
-      debugPrint('Error saving session: $e');
-      _navigateToRoleSelection();
+      return;
     }
+
+    // fallback: check supabase current session
+    final sess = AuthService().supabase.auth.currentSession;
+    if (sess != null) {
+      await AuthService().handleSuccessfulAuth(sess);
+      setState(() {
+        _isLoading = false;
+      });
+      await _routeBasedOnUserRole();
+      return;
+    }
+
+    // No session found, navigate to role selection
+    setState(() {
+      _isLoading = false;
+    });
+    _navigateToRoleSelection();
   }
+
+  // This method is no longer needed as session handling is now in AuthService
 
   Future<void> _routeBasedOnUserRole() async {
     try {

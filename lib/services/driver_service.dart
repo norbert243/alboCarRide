@@ -11,6 +11,12 @@ class DriverService {
 
   /// Fetch driver profile by ID
   Future<DriverModel?> fetchDriverProfile(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot fetch profile for another user');
+    }
+
     try {
       final response = await _supabase
           .from('drivers')
@@ -34,6 +40,12 @@ class DriverService {
 
   /// Update driver approval status via RPC
   Future<bool> updateApprovalStatus(String driverId, bool isApproved) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot update approval status for another user');
+    }
+
     try {
       await _supabase.rpc(
         'set_driver_approval',
@@ -55,6 +67,12 @@ class DriverService {
 
   /// Update driver online status
   Future<bool> updateOnlineStatus(String driverId, bool isOnline) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot update online status for another user');
+    }
+
     try {
       await _supabase
           .from('drivers')
@@ -82,6 +100,12 @@ class DriverService {
 
   /// Update driver vehicle type
   Future<bool> updateVehicleType(String driverId, String vehicleType) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot update vehicle type for another user');
+    }
+
     try {
       await _supabase
           .from('drivers')
@@ -153,6 +177,12 @@ class DriverService {
 
   /// Check if driver is approved and can go online
   Future<bool> canGoOnline(String driverId) async {
+    // Security validation: ensure driverId matches authenticated user
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId != driverId) {
+      throw Exception('Cannot check approval status for another user');
+    }
+
     try {
       final driver = await fetchDriverProfile(driverId);
       if (driver == null) return false;
