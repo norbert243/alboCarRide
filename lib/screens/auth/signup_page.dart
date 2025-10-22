@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
@@ -297,15 +296,14 @@ class _SignupPageState extends State<SignupPage> {
             user: User(
               id: userId,
               appMetadata: {},
-              userMetadata: {
-                'phone': phoneNumber,
-                'role': widget.role,
-              },
+              userMetadata: {'phone': phoneNumber, 'role': widget.role},
               aud: 'authenticated',
               createdAt: DateTime.now().toIso8601String(),
             ),
           );
-          await AuthService.saveSession(minimalSession);
+          // Use the singleton instance directly for session handling
+          final authService = AuthService();
+          await authService.handleSuccessfulAuth(minimalSession);
           print('SignupPage: Basic session info saved without tokens');
         }
       } else {
@@ -359,7 +357,9 @@ class _SignupPageState extends State<SignupPage> {
         'SignupPage: Refresh token exists: ${session.refreshToken != null}',
       );
 
-      await AuthService.saveSession(session);
+      // Use the singleton instance directly for session handling
+      final authService = AuthService();
+      await authService.handleSuccessfulAuth(session);
       print('SignupPage: Session saved to local storage using AuthService');
     } catch (e) {
       print('SignupPage: Error saving session: $e');
@@ -373,15 +373,14 @@ class _SignupPageState extends State<SignupPage> {
         user: User(
           id: userId,
           appMetadata: {},
-          userMetadata: {
-            'phone': phoneNumber,
-            'role': role,
-          },
+          userMetadata: {'phone': phoneNumber, 'role': role},
           aud: 'authenticated',
           createdAt: DateTime.now().toIso8601String(),
         ),
       );
-      await AuthService.saveSession(minimalSession);
+      // Use the singleton instance directly for session handling
+      final authService = AuthService();
+      await authService.handleSuccessfulAuth(minimalSession);
       print('SignupPage: Basic session info saved as fallback');
     }
   }
@@ -415,8 +414,7 @@ class _SignupPageState extends State<SignupPage> {
 
         final verificationStatus =
             profileResponse['verification_status'] as String?;
-        final vehicleType =
-            driverResponse?['vehicle_type'] as String?;
+        final vehicleType = driverResponse?['vehicle_type'] as String?;
 
         print('Driver navigation debug:');
         print('  isNewUser: $isNewUser');
@@ -620,130 +618,130 @@ class _SignupPageState extends State<SignupPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                  const SizedBox(height: 20),
-                  Text(
-                    'Join AlboCarRide as a ${widget.role}',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Enter your details to get started',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 32),
-                  TextFormField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      hintText: '+27XXXXXXXXX',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                    keyboardType: TextInputType.phone,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your phone number';
-                      }
-                      if (!value.startsWith('+')) {
-                        return 'Please include country code (e.g., +27XXXXXXXXX)';
-                      }
-                      if (value.length < 10) {
-                        return 'Please enter a valid phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _fullNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your full name';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (_otpSent) ...[
-                    TextFormField(
-                      controller: _otpController,
-                      decoration: const InputDecoration(
-                        labelText: 'Enter OTP',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.lock),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Join AlboCarRide as a ${widget.role}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
-                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Enter your details to get started',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 32),
+                    TextFormField(
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number',
+                        hintText: '+27XXXXXXXXX',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone),
+                      ),
+                      keyboardType: TextInputType.phone,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter the OTP';
+                          return 'Please enter your phone number';
                         }
-                        if (value.length != 6) {
-                          return 'OTP must be 6 digits';
+                        if (!value.startsWith('+')) {
+                          return 'Please include country code (e.g., +27XXXXXXXXX)';
+                        }
+                        if (value.length < 10) {
+                          return 'Please enter a valid phone number';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-                  ],
-                  if (!_otpSent) ...[
-                    const SizedBox(height: 16),
-                    const Text(
-                      'We\'ll send you a verification code to confirm your phone number',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    TextFormField(
+                      controller: _fullNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Full Name',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person),
                       ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter your full name';
+                        }
+                        return null;
+                      },
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                    const SizedBox(height: 16),
+                    if (_otpSent) ...[
+                      TextFormField(
+                        controller: _otpController,
+                        decoration: const InputDecoration(
+                          labelText: 'Enter OTP',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.lock),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter the OTP';
+                          }
+                          if (value.length != 6) {
+                            return 'OTP must be 6 digits';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (!_otpSent) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'We\'ll send you a verification code to confirm your phone number',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
                               ),
+                            )
+                          : Text(
+                              _otpSent ? 'Verify & Sign Up' : 'Send OTP',
+                              style: const TextStyle(fontSize: 16),
                             ),
-                          )
-                        : Text(
-                            _otpSent ? 'Verify & Sign Up' : 'Send OTP',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                  ),
-                  if (_otpSent) ...[
-                    const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => setState(() {
-                              _otpSent = false;
-                              _otpController.clear();
-                            }),
-                      child: const Text(
-                        'Change Phone Number',
-                        style: TextStyle(color: Colors.blue),
-                      ),
                     ),
-                  ],
+                    if (_otpSent) ...[
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () => setState(() {
+                                _otpSent = false;
+                                _otpController.clear();
+                              }),
+                        child: const Text(
+                          'Change Phone Number',
+                          style: TextStyle(color: Colors.blue),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -753,5 +751,4 @@ class _SignupPageState extends State<SignupPage> {
       ),
     );
   }
-
 }

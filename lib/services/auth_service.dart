@@ -34,7 +34,10 @@ class AuthService {
     await _storage.write(key: _kAccessTokenKey, value: session.accessToken);
     await _storage.write(key: _kRefreshTokenKey, value: session.refreshToken);
     if (session.expiresAt != null) {
-      await _storage.write(key: _kSessionExpiryKey, value: session.expiresAt.toString());
+      await _storage.write(
+        key: _kSessionExpiryKey,
+        value: session.expiresAt.toString(),
+      );
     }
   }
 
@@ -43,7 +46,7 @@ class AuthService {
     await _storage.delete(key: _kAccessTokenKey);
     await _storage.delete(key: _kRefreshTokenKey);
     await _storage.delete(key: _kSessionExpiryKey);
-    
+
     // Clear local state
     _isAuthenticated = false;
     _currentUserId = null;
@@ -57,31 +60,45 @@ class AuthService {
       final refresh = await _storage.read(key: _kRefreshTokenKey);
 
       if (access == null || refresh == null) {
+        print('❌ No tokens found in secure storage');
         return false;
       }
 
-      // Attempt to set session in Supabase client.
+      print(
+        '🔐 Found tokens in secure storage, attempting to restore session...',
+      );
+
+      // WhatsApp-style: Use refresh token to restore session
       try {
-        await supabase.auth.setSession(access); // some SDKs accept only access token
-      } catch (e) {
-        // fallback: try setSession with refresh token
+        // First try with refresh token (more reliable for expired sessions)
+        await supabase.auth.setSession(refresh);
+        print('✅ Session restored using refresh token');
+      } catch (refreshError) {
+        print('⚠️ Refresh token failed: $refreshError, trying access token...');
+
+        // Fallback to access token
         try {
           await supabase.auth.setSession(access);
-        } catch (err) {
-          // Last-resort: signIn with refresh token via REST RPC - if failing, clear local storage
+          print('✅ Session restored using access token');
+        } catch (accessError) {
+          print('❌ Access token also failed: $accessError');
+          // Both tokens failed, clear storage and return false
           await clearLocalSession();
           return false;
         }
       }
 
+      // WhatsApp-style: Wait a moment for session to be fully established
+      await Future.delayed(const Duration(milliseconds: 500));
+
       // Update local state if session is restored
       final currentSession = supabase.auth.currentSession;
       final currentUser = supabase.auth.currentUser;
-      
+
       if (currentSession != null && currentUser != null) {
         _currentUserId = currentUser.id;
         _isAuthenticated = true;
-        
+
         // Fetch user role from profiles table
         final profileResponse = await supabase
             .from('profiles')
@@ -89,16 +106,23 @@ class AuthService {
             .eq('id', currentUser.id)
             .single()
             .catchError((_) => null);
-        
-        _currentUserRole = profileResponse['role'] ?? 'customer';
-        
-        print('✅ Session restored successfully: User ${currentUser.id} authenticated');
+
+        _currentUserRole = profileResponse?['role'] ?? 'customer';
+
+        print(
+          '✅ Session restored successfully: User ${currentUser.id} authenticated',
+        );
+        print('🔐 Current user role: $_currentUserRole');
         return true;
       } else {
+        print(
+          '❌ Session restoration failed - no current session/user after token set',
+        );
         await clearLocalSession();
         return false;
       }
     } catch (e) {
+      print('❌ Error restoring session: $e');
       await clearLocalSession();
       return false;
     }
@@ -108,11 +132,11 @@ class AuthService {
   Future<void> handleSuccessfulAuth(Session session) async {
     await saveSessionLocally(session);
     // ensure supabase.auth has this session already; typically supabase sets this automatically
-    
+
     // Update local state
     _currentUserId = session.user.id;
     _isAuthenticated = true;
-    
+
     // Fetch user role from profiles table
     final profileResponse = await supabase
         .from('profiles')
@@ -120,7 +144,7 @@ class AuthService {
         .eq('id', session.user.id)
         .single()
         .catchError((_) => null);
-    
+
     _currentUserRole = profileResponse['role'] ?? 'customer';
   }
 
@@ -134,20 +158,14 @@ class AuthService {
     try {
       // Clean phone number
       final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-      
+
       // Send OTP
       await supabase.auth.signInWithOtp(
         phone: cleanPhone,
-        data: {
-          'full_name': fullName,
-          'role': role,
-        },
+        data: {'full_name': fullName, 'role': role},
       );
 
-      return {
-        'success': true,
-        'message': 'OTP sent successfully',
-      };
+      return {'success': true, 'message': 'OTP sent successfully'};
     } catch (e) {
       return {
         'success': false,
@@ -163,7 +181,7 @@ class AuthService {
   }) async {
     try {
       final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-      
+
       final response = await supabase.auth.verifyOTP(
         phone: cleanPhone,
         token: otp,
@@ -209,7 +227,7 @@ class AuthService {
   Future<bool> checkUserExists(String phone) async {
     try {
       final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-      
+
       final response = await supabase
           .from('profiles')
           .select('id')
@@ -238,7 +256,7 @@ class AuthService {
   }) async {
     try {
       print('🔧 Creating driver profile for: $driverId');
-      
+
       // Debug authentication state
       final currentUser = supabase.auth.currentUser;
       final currentSession = supabase.auth.currentSession;
@@ -246,9 +264,11 @@ class AuthService {
       print('  - User ID: ${currentUser?.id}');
       print('  - Session exists: ${currentSession != null}');
       print('  - Driver ID matches auth: ${currentUser?.id == driverId}');
-      
+
       if (currentUser?.id != driverId) {
-        print('⚠️ WARNING: Driver ID mismatch! Auth: ${currentUser?.id}, Provided: $driverId');
+        print(
+          '⚠️ WARNING: Driver ID mismatch! Auth: ${currentUser?.id}, Provided: $driverId',
+        );
       }
 
       // Insert complete driver record with all required fields
@@ -268,7 +288,7 @@ class AuthService {
       print('💰 Creating driver wallet...');
       print('  - Driver ID for wallet: $driverId');
       print('  - Auth UID for RLS check: ${currentUser?.id}');
-      
+
       final walletResult = await supabase.from('driver_wallets').upsert({
         'driver_id': driverId,
         'balance': 0.00,
@@ -294,7 +314,9 @@ class AuthService {
   }
 
   // Check driver approval status
-  Future<Map<String, dynamic>> checkDriverApprovalStatus(String driverId) async {
+  Future<Map<String, dynamic>> checkDriverApprovalStatus(
+    String driverId,
+  ) async {
     try {
       final response = await supabase
           .from('drivers')
@@ -304,10 +326,7 @@ class AuthService {
 
       final bool isApproved = response['is_approved'] ?? false;
 
-      return {
-        'success': true,
-        'isApproved': isApproved,
-      };
+      return {'success': true, 'isApproved': isApproved};
     } catch (e) {
       return {
         'success': false,
@@ -373,21 +392,23 @@ class AuthService {
   static Future<void> initialize() async {
     await _instance.initializeSession();
   }
+
   /// Check if auto-login is possible by verifying tokens exist in secure storage
   Future<Map<String, dynamic>> canAutoLogin() async {
     try {
       final accessToken = await _storage.read(key: _kAccessTokenKey);
       final refreshToken = await _storage.read(key: _kRefreshTokenKey);
-      
+
       final bool hasAccessToken = accessToken != null && accessToken.isNotEmpty;
-      final bool hasRefreshToken = refreshToken != null && refreshToken.isNotEmpty;
+      final bool hasRefreshToken =
+          refreshToken != null && refreshToken.isNotEmpty;
       final bool canAutoLogin = hasAccessToken && hasRefreshToken;
-      
+
       print('🔐 Session Integrity Check:');
       print('  accessToken = ${hasAccessToken ? "Exists" : "Missing"}');
       print('  refreshToken = ${hasRefreshToken ? "Exists" : "Missing"}');
       print('  canAutoLogin = $canAutoLogin');
-      
+
       return {
         'accessTokenExists': hasAccessToken,
         'refreshTokenExists': hasRefreshToken,
