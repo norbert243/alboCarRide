@@ -83,17 +83,22 @@ class CustomerHomePage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Map Section
+            // Map Section - Enhanced Uber-style
             const Text(
-              'Your Location',
+              'Find Your Ride',
               style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
                 color: Colors.black87,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Available drivers near you',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
             const SizedBox(height: 16),
-            const CustomerMapWidget(height: 200),
+            const CustomerMapWidget(height: 300),
             const SizedBox(height: 24),
 
             // Quick Actions
