@@ -37,7 +37,7 @@ serve(async (req) => {
 
     if (fetchError || !otpRecord) {
       return new Response(
-        JSON.stringify({ error: 'No OTP found for this phone number' }),
+        JSON.stringify({ error: 'No verification code found. Please request a new code.' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -45,7 +45,7 @@ serve(async (req) => {
     // Check if OTP is already verified
     if (otpRecord.verified) {
       return new Response(
-        JSON.stringify({ error: 'OTP already used' }),
+        JSON.stringify({ error: 'This code has already been used. Please request a new code.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -54,7 +54,7 @@ serve(async (req) => {
     const expiresAt = new Date(otpRecord.expires_at)
     if (expiresAt < new Date()) {
       return new Response(
-        JSON.stringify({ error: 'OTP has expired' }),
+        JSON.stringify({ error: 'Verification code expired. Please request a new code.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -62,7 +62,7 @@ serve(async (req) => {
     // Check maximum attempts (5 attempts allowed)
     if (otpRecord.attempts >= 5) {
       return new Response(
-        JSON.stringify({ error: 'Maximum verification attempts exceeded' }),
+        JSON.stringify({ error: 'Too many incorrect attempts. Please request a new code.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -75,10 +75,11 @@ serve(async (req) => {
         .update({ attempts: otpRecord.attempts + 1 })
         .eq('phone_number', phoneNumber)
 
+      const attemptsLeft = 5 - (otpRecord.attempts + 1)
       return new Response(
         JSON.stringify({
-          error: 'Invalid OTP',
-          attemptsRemaining: 5 - (otpRecord.attempts + 1)
+          error: `Incorrect verification code. ${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} remaining.`,
+          attemptsRemaining: attemptsLeft
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -90,31 +91,41 @@ serve(async (req) => {
       .update({ verified: true })
       .eq('phone_number', phoneNumber)
 
-    // Check if user already exists
+    // Check if user already exists in profiles
     const { data: existingProfile } = await supabaseClient
       .from('profiles')
       .select('id, role')
       .eq('phone', phoneNumber)
       .single()
 
+    // Also check if auth user exists
+    const email = `${phoneNumber}@albocarride.com`
+    const { data: authUsers } = await supabaseClient.auth.admin.listUsers()
+    const existingAuthUser = authUsers?.users?.find(u => u.email === email)
+
     let userId: string
     let isNewUser = false
-    let email: string
     let password: string
 
-    if (existingProfile) {
-      // Existing user
-      userId = existingProfile.id
-      email = `${phoneNumber}@albocarride.com`
+    if (existingProfile || existingAuthUser) {
+      // Existing user - just log them in
+      userId = existingProfile?.id || existingAuthUser?.id || ''
 
-      // For existing users, we need to reset their password to allow sign in
-      // Generate a new temporary password
+      // For existing users, generate a new password for this session
       password = `Albo${Date.now()}${Math.random().toString(36).substr(2, 9)}`
 
-      // Update user password
-      await supabaseClient.auth.admin.updateUserById(userId, {
+      // Update user password to allow sign in
+      const { error: updateError } = await supabaseClient.auth.admin.updateUserById(userId, {
         password: password,
       })
+
+      if (updateError) {
+        console.error('Password update error:', updateError)
+        return new Response(
+          JSON.stringify({ error: 'Unable to sign in. Please try again.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
     } else {
       // New user - create account
       isNewUser = true
@@ -135,7 +146,7 @@ serve(async (req) => {
       if (authError || !authData.user) {
         console.error('User creation error:', authError)
         return new Response(
-          JSON.stringify({ error: 'Failed to create user account' }),
+          JSON.stringify({ error: 'Unable to create account. Please try again.' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }

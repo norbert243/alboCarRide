@@ -159,15 +159,12 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           await _navigateBasedOnUserStatus(role, userId, isNewUser);
         }
       } else {
-        final errorMessage = responseData['error'] ?? 'Invalid OTP';
-        final attemptsRemaining = responseData['attemptsRemaining'];
+        final errorMessage = responseData['error'] ?? 'Incorrect verification code';
 
         if (mounted) {
           CustomToast.showError(
             context: context,
-            message: attemptsRemaining != null
-                ? '$errorMessage. $attemptsRemaining attempts remaining.'
-                : errorMessage,
+            message: errorMessage,
           );
         }
 
@@ -182,7 +179,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       if (mounted) {
         CustomToast.showError(
           context: context,
-          message: 'Failed to verify OTP. Please try again.',
+          message: 'Connection error. Please check your internet and try again.',
         );
       }
     } finally {
@@ -436,12 +433,19 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
+                        color: Colors.black,
                       ),
                       decoration: InputDecoration(
                         counterText: '',
+                        filled: true,
+                        fillColor: Colors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Colors.grey),
+                          borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -450,6 +454,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                             width: 2,
                           ),
                         ),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
