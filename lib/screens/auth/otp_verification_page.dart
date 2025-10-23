@@ -105,21 +105,40 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         final userId = responseData['userId'];
         final isNewUser = responseData['isNewUser'] ?? false;
         final role = responseData['role'];
+        final email = responseData['email'];
+        final password = responseData['password'];
 
-        // Try to get the current session
-        await Future.delayed(const Duration(milliseconds: 1500));
-        final session = Supabase.instance.client.auth.currentSession;
+        // Sign in with the credentials provided by the backend
+        if (email != null && password != null) {
+          try {
+            final authResponse = await Supabase.instance.client.auth.signInWithPassword(
+              email: email,
+              password: password,
+            );
 
-        if (session != null) {
-          // Save session with tokens
-          await _saveSessionWithDetails(
-            session,
-            userId,
-            widget.phoneNumber,
-            role,
-          );
+            if (authResponse.session != null) {
+              // Save session with tokens
+              await _saveSessionWithDetails(
+                authResponse.session!,
+                userId,
+                widget.phoneNumber,
+                role,
+              );
+            }
+          } catch (signInError) {
+            print('Sign in error: $signInError');
+            // Fallback: save basic session info without tokens
+            await AuthService.saveSession(
+              userId: userId,
+              userPhone: widget.phoneNumber,
+              userRole: role,
+              expiry: DateTime.now().add(const Duration(days: 30)),
+              accessToken: null,
+              refreshToken: null,
+            );
+          }
         } else {
-          // Save basic session info without tokens
+          // Fallback: save basic session info without tokens
           await AuthService.saveSession(
             userId: userId,
             userPhone: widget.phoneNumber,

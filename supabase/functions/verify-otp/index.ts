@@ -99,28 +99,27 @@ serve(async (req) => {
 
     let userId: string
     let isNewUser = false
-    let session = null
+    let email: string
+    let password: string
 
     if (existingProfile) {
-      // Existing user - sign them in
+      // Existing user
       userId = existingProfile.id
+      email = `${phoneNumber}@albocarride.com`
 
-      // Create a session for existing user using admin API
-      const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email: `${phoneNumber}@albocarride.com`,
+      // For existing users, we need to reset their password to allow sign in
+      // Generate a new temporary password
+      password = `Albo${Date.now()}${Math.random().toString(36).substr(2, 9)}`
+
+      // Update user password
+      await supabaseClient.auth.admin.updateUserById(userId, {
+        password: password,
       })
-
-      if (sessionError) {
-        console.error('Session creation error:', sessionError)
-      } else {
-        session = sessionData
-      }
     } else {
       // New user - create account
       isNewUser = true
-      const email = `${phoneNumber}@albocarride.com`
-      const password = `Alb0CarRide${Date.now()}`
+      email = `${phoneNumber}@albocarride.com`
+      password = `Albo${Date.now()}${Math.random().toString(36).substr(2, 9)}`
 
       const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
         email,
@@ -171,18 +170,6 @@ serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
       }
-
-      // Generate session for new user
-      const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email,
-      })
-
-      if (sessionError) {
-        console.error('Session creation error:', sessionError)
-      } else {
-        session = sessionData
-      }
     }
 
     return new Response(
@@ -191,7 +178,8 @@ serve(async (req) => {
         userId,
         isNewUser,
         role: role || existingProfile?.role || 'customer',
-        session,
+        email,
+        password,
         message: 'Phone number verified successfully'
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
