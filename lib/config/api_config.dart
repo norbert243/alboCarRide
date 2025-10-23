@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// API Configuration for AlboCarRide
 ///
@@ -27,8 +28,7 @@ import 'dart:math';
 
 class ApiConfig {
   // Google Maps Platform Configuration
-  static String get googleMapsApiKey =>
-      const String.fromEnvironment('GOOGLE_MAPS_API_KEY', defaultValue: '');
+  static String get googleMapsApiKey => dotenv.get('GOOGLE_MAPS_API_KEY');
   static const String googlePlacesBaseUrl =
       'https://maps.googleapis.com/maps/api/place';
   static const String googleDirectionsBaseUrl =

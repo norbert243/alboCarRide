@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/widgets/customer_map_widget.dart';
 
 class CustomerHomePage extends StatelessWidget {
   const CustomerHomePage({super.key});
@@ -80,7 +81,20 @@ class CustomerHomePage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Map Section
+            const Text(
+              'Your Location',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const CustomerMapWidget(height: 200),
+            const SizedBox(height: 24),
 
             // Quick Actions
             const Text(

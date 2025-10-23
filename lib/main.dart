@@ -195,7 +195,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const AuthWrapper(),
+      home: const CustomerHomePage(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
@@ -210,7 +210,9 @@ class MyApp extends StatelessWidget {
           return VehicleTypeSelectionPage(driverId: args ?? '');
         },
         '/vehicle-details': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>?;
           return VehicleDetailsPage(
             driverId: args?['driverId'] ?? '',
             vehicleType: args?['vehicleType'] ?? 'car',

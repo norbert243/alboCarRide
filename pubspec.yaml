@@ -53,6 +53,9 @@ dependencies:
   # Location services for driver tracking
   geolocator: ^11.0.1
 
+  # Google Maps for Flutter
+  google_maps_flutter: ^2.5.0
+
   # App links for deep linking (Android only) - DISABLED due to cross-drive symlink issues
   # app_links: ^6.4.1
 
