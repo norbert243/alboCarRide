@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -12,11 +14,31 @@ class SupportPage extends StatefulWidget {
 
 class _SupportPageState extends State<SupportPage> {
   final _formKey = GlobalKey<FormState>();
-  final _subjectController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _messageController = TextEditingController();
   bool _isLoading = false;
   String? _customerId;
   String? _customerName;
+  String? _customerEmail;
+  String? _customerPhone;
+  String _selectedIssueType = 'General Inquiry';
+
+  // Formspree endpoint - Replace with your actual Formspree form ID
+  // Format: https://formspree.io/f/YOUR_FORM_ID
+  static const String _formspreeEndpoint = 'https://formspree.io/f/xdkpangw';
+
+  final List<String> _issueTypes = [
+    'General Inquiry',
+    'App Crash/Technical Issue',
+    'Booking Problem',
+    'Payment Issue',
+    'Driver Issue',
+    'Account Problem',
+    'Feature Request',
+    'Safety Concern',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -26,7 +48,8 @@ class _SupportPageState extends State<SupportPage> {
 
   @override
   void dispose() {
-    _subjectController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
     _messageController.dispose();
     super.dispose();
   }
@@ -36,18 +59,43 @@ class _SupportPageState extends State<SupportPage> {
       _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
-        final response = await Supabase.instance.client
-            .from('profiles')
-            .select('full_name, phone')
-            .eq('id', _customerId!)
-            .single();
+        // Try to load from profiles table
+        try {
+          final response = await Supabase.instance.client
+              .from('profiles')
+              .select('full_name, phone, email')
+              .eq('id', _customerId!)
+              .single();
 
-        setState(() {
-          _customerName = response['full_name'];
-        });
+          setState(() {
+            _customerName = response['full_name'] ?? '';
+            _customerPhone = response['phone'];
+            _customerEmail = response['email'];
+            _nameController.text = _customerName ?? '';
+            _emailController.text = _customerEmail ?? '';
+          });
+        } catch (e) {
+          print('Error loading from profiles: $e');
+        }
+
+        // Fallback: Try to get email from auth user if not in profiles
+        if (_customerEmail == null || _customerEmail!.isEmpty) {
+          try {
+            final user = Supabase.instance.client.auth.currentUser;
+            if (user != null && user.email != null) {
+              setState(() {
+                _customerEmail = user.email;
+                _emailController.text = _customerEmail!;
+              });
+            }
+          } catch (e) {
+            print('Error loading from auth user: $e');
+          }
+        }
       }
     } catch (e) {
       print('Error loading customer info: $e');
+      // Even if we can't load user info, the form should still work
     }
   }
 
@@ -57,34 +105,134 @@ class _SupportPageState extends State<SupportPage> {
     setState(() => _isLoading = true);
 
     try {
-      // In a real implementation, this would send the support request to your backend
-      // For demo purposes, we'll simulate the submission
+      // Prepare the data to send to Formspree
+      final formData = {
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'issueType': _selectedIssueType,
+        'message': _messageController.text.trim(),
+        'userId': _customerId ?? 'unknown',
+        'phone': _customerPhone ?? 'not provided',
+        'timestamp': DateTime.now().toIso8601String(),
+        'platform': 'mobile_app',
+      };
 
-      await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+      // Send request to Formspree with timeout and retry logic
+      final response = await _sendToFormspree(formData);
 
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Support request submitted successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Success!
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Support request submitted successfully! We\'ll get back to you soon.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 4),
+            ),
+          );
 
-      // Clear form
-      _subjectController.clear();
-      _messageController.clear();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error submitting request: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+          // Clear form
+          _messageController.clear();
+          setState(() {
+            _selectedIssueType = 'General Inquiry';
+          });
+        }
+      } else {
+        throw Exception('Server returned status code: ${response.statusCode}');
+      }
+    } on http.ClientException catch (e) {
+      // Network error
+      if (mounted) {
+        _showErrorDialog(
+          'Network Error',
+          'Unable to connect to the server. Please check your internet connection and try again.',
+          showRetry: true,
+        );
+      }
+      print('Network error submitting support request: $e');
+    } on Exception catch (e) {
+      // Other errors
+      if (mounted) {
+        _showErrorDialog(
+          'Submission Failed',
+          'We couldn\'t submit your request right now. Please try again or contact us directly at support@albocarride.com',
+          showRetry: true,
+        );
+      }
+      print('Error submitting support request: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Sends data to Formspree with timeout and proper error handling
+  Future<http.Response> _sendToFormspree(Map<String, dynamic> data) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_formspreeEndpoint),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: json.encode(data),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              throw Exception('Request timed out. Please try again.');
+            },
+          );
+
+      return response;
+    } catch (e) {
+      print('Formspree submission error: $e');
+      rethrow;
+    }
+  }
+
+  /// Shows an error dialog with optional retry functionality
+  void _showErrorDialog(String title, String message, {bool showRetry = false}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          if (showRetry)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _submitSupportRequest();
+              },
+              child: const Text('Retry'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _launchPhone(String phoneNumber) async {
@@ -224,64 +372,154 @@ class _SupportPageState extends State<SupportPage> {
               key: _formKey,
               child: Column(
                 children: [
+                  // Name Field
                   TextFormField(
-                    controller: _subjectController,
+                    controller: _nameController,
                     decoration: const InputDecoration(
-                      labelText: 'Subject',
+                      labelText: 'Your Name',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.subject),
+                      prefixIcon: Icon(Icons.person),
+                      hintText: 'Enter your full name',
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a subject';
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your name';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Name must be at least 2 characters';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
+
+                  // Email Field
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email Address',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email),
+                      hintText: 'your.email@example.com',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      // Basic email validation
+                      final emailRegex = RegExp(
+                        r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+                      );
+                      if (!emailRegex.hasMatch(value.trim())) {
+                        return 'Please enter a valid email address';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Issue Type Dropdown
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedIssueType,
+                    decoration: const InputDecoration(
+                      labelText: 'Issue Type',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.category),
+                    ),
+                    items: _issueTypes.map((String type) {
+                      return DropdownMenuItem<String>(
+                        value: type,
+                        child: Text(type),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedIssueType = newValue;
+                        });
+                      }
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please select an issue type';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Message Field
                   TextFormField(
                     controller: _messageController,
-                    maxLines: 5,
+                    maxLines: 6,
+                    maxLength: 1000,
                     decoration: const InputDecoration(
-                      labelText: 'Message',
+                      labelText: 'Message / Description',
                       border: OutlineInputBorder(),
                       alignLabelWithHint: true,
+                      hintText: 'Please describe your issue or question in detail...',
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return 'Please enter your message';
                       }
-                      if (value.length < 10) {
-                        return 'Please provide more details';
+                      if (value.trim().length < 20) {
+                        return 'Please provide more details (at least 20 characters)';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
+
+                  // Submit Button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _submitSupportRequest,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+                        backgroundColor: Colors.deepPurple,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
+                        disabledBackgroundColor: Colors.grey[300],
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                              width: 20,
-                              height: 20,
+                              width: 24,
+                              height: 24,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2,
+                                strokeWidth: 2.5,
                                 valueColor: AlwaysStoppedAnimation(
                                   Colors.white,
                                 ),
                               ),
                             )
-                          : const Text(
-                              'Submit Request',
-                              style: TextStyle(fontSize: 16),
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.send, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Submit Support Request',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Info text
+                  Text(
+                    'We typically respond within 24 hours',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
