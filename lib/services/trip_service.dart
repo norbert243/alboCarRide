@@ -269,6 +269,93 @@ class TripService {
     }
   }
 
+  /// Format ride date for display
+  String _formatRideDate(String? dateString) {
+    if (dateString == null) return 'Unknown date';
+
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Invalid date';
+    }
+  }
+
+  /// Get ride history for a customer or driver from the rides table
+  Future<List<Map<String, dynamic>>> getRideHistory(
+    String userId, {
+    String? userRole,
+    int limit = 20,
+  }) async {
+    try {
+      // Determine if we're fetching for customer or driver
+      final isCustomer = userRole == 'customer' || userRole == null;
+      final columnName = isCustomer ? 'customer_id' : 'driver_id';
+
+      final response = await supabase
+          .from('rides')
+          .select('''
+            *,
+            customer:customers!inner(
+              id
+            ),
+            driver:drivers!inner(
+              id,
+              vehicle_make,
+              vehicle_model,
+              vehicle_color,
+              license_plate
+            ),
+            profiles!inner(
+              full_name,
+              avatar_url
+            )
+          ''')
+          .eq(columnName, userId)
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      return response.map((ride) {
+        final customer = ride['customer'] as Map<String, dynamic>?;
+        final driver = ride['driver'] as Map<String, dynamic>?;
+        final profile = ride['profiles'] as Map<String, dynamic>?;
+
+        String otherPartyName = 'Unknown';
+        if (isCustomer) {
+          // For customers, show driver info
+          otherPartyName = profile?['full_name'] ?? 'Driver';
+        } else {
+          // For drivers, show customer info
+          otherPartyName = profile?['full_name'] ?? 'Customer';
+        }
+
+        return {
+          'id': ride['id'],
+          'pickup_location': ride['pickup_address'],
+          'dropoff_location': ride['dropoff_address'],
+          'other_party_name': otherPartyName,
+          'fare': ride['total_price'] ?? 0.0,
+          'status': ride['status'] ?? 'completed',
+          'date': _formatRideDate(ride['created_at']),
+          'rating': isCustomer
+              ? (ride['driver_rating']?.toDouble() ?? 0.0)
+              : (ride['customer_rating']?.toDouble() ?? 0.0),
+          'vehicle_info': driver != null
+              ? '${driver['vehicle_make']} ${driver['vehicle_model']} (${driver['vehicle_color']})'
+              : 'Unknown vehicle',
+          'actual_distance': ride['actual_distance'],
+          'actual_duration': ride['actual_duration'],
+          'base_fare': ride['base_fare'],
+          'distance_fare': ride['distance_fare'],
+          'time_fare': ride['time_fare'],
+          'surge_multiplier': ride['surge_multiplier'],
+        };
+      }).toList();
+    } catch (e) {
+      throw Exception('Failed to get ride history: $e');
+    }
+  }
+
   /// Completes the trip with cash payment using the atomic RPC.
   Future<Map<String, dynamic>> completeTripWithCash(String tripId) async {
     try {

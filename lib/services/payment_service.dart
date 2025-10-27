@@ -1,5 +1,8 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PaymentService {
+  static final SupabaseClient _supabase = Supabase.instance.client;
+
   /// Create a payment intent for a ride
   static Future<Map<String, dynamic>?> createPaymentIntent({
     required double amount,
@@ -212,5 +215,90 @@ class PaymentService {
     }
 
     return [];
+  }
+
+  /// Get payment history for a customer
+  static Future<List<Map<String, dynamic>>> getPaymentHistory(
+    String customerId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('payments')
+          .select('''
+            *,
+            trip:trips(
+              request_id,
+              status
+            ),
+            request:trips!inner(
+              ride_request:ride_requests(
+                pickup_address,
+                dropoff_address
+              )
+            )
+          ''')
+          .eq('rider_id', customerId)
+          .order('created_at', ascending: false);
+
+      if (response != null) {
+        final List<Map<String, dynamic>> payments = [];
+
+        for (final payment in response) {
+          final trip = payment['trip'] as Map<String, dynamic>?;
+          final request = payment['request'] as Map<String, dynamic>?;
+          final rideRequest = request?['ride_request'] as Map<String, dynamic>?;
+
+          String description = 'Payment';
+          if (rideRequest != null) {
+            final pickup = rideRequest['pickup_address'] ?? 'Unknown pickup';
+            final dropoff = rideRequest['dropoff_address'] ?? 'Unknown dropoff';
+            description = 'Ride from $pickup to $dropoff';
+          }
+
+          payments.add({
+            'id': payment['id'],
+            'amount': payment['amount'] ?? 0.0,
+            'description': description,
+            'date': _formatPaymentDate(payment['created_at']),
+            'status': payment['status'] ?? 'completed',
+            'payment_method': _formatPaymentMethod(payment['payment_method']),
+            'transaction_id': payment['transaction_id'],
+            'processed_at': payment['processed_at'],
+          });
+        }
+
+        return payments;
+      }
+    } catch (e) {
+      print('Error getting payment history: $e');
+    }
+
+    return [];
+  }
+
+  /// Format payment date for display
+  static String _formatPaymentDate(String? dateString) {
+    if (dateString == null) return 'Unknown date';
+
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Invalid date';
+    }
+  }
+
+  /// Format payment method for display
+  static String _formatPaymentMethod(String? method) {
+    switch (method) {
+      case 'card':
+        return 'Credit Card';
+      case 'cash':
+        return 'Cash';
+      case 'mobile_money':
+        return 'Mobile Money';
+      default:
+        return 'Unknown';
+    }
   }
 }

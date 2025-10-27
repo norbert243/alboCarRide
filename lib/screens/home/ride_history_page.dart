@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/trip_service.dart';
 
 class RideHistoryPage extends StatefulWidget {
   const RideHistoryPage({super.key});
@@ -12,7 +12,9 @@ class RideHistoryPage extends StatefulWidget {
 class _RideHistoryPageState extends State<RideHistoryPage> {
   List<Map<String, dynamic>> _rideHistory = [];
   bool _isLoading = true;
-  String? _customerId;
+  String? _userId;
+  String? _userRole;
+  final TripService _tripService = TripService();
 
   @override
   void initState() {
@@ -24,56 +26,18 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
     setState(() => _isLoading = true);
 
     try {
-      _customerId = await SessionService.getUserIdStatic();
+      _userId = await SessionService.getUserIdStatic();
+      _userRole = await SessionService.getUserRoleStatic();
 
-      if (_customerId != null) {
-        // In a real implementation, this would query the ride_requests table
-        // For demo purposes, we'll use sample data
-        await Future.delayed(const Duration(seconds: 1)); // Simulate loading
+      if (_userId != null) {
+        // Fetch real ride history from the database
+        final rideHistory = await _tripService.getRideHistory(
+          _userId!,
+          userRole: _userRole,
+        );
 
         setState(() {
-          _rideHistory = [
-            {
-              'id': '1',
-              'pickup_location': '123 Main Street',
-              'dropoff_location': 'Downtown Mall',
-              'driver_name': 'John Smith',
-              'fare': 15.50,
-              'status': 'completed',
-              'date': '2024-01-15 14:30',
-              'rating': 4.5,
-            },
-            {
-              'id': '2',
-              'pickup_location': 'Airport Terminal A',
-              'dropoff_location': 'City Center Hotel',
-              'driver_name': 'Sarah Johnson',
-              'fare': 32.75,
-              'status': 'completed',
-              'date': '2024-01-12 09:15',
-              'rating': 5.0,
-            },
-            {
-              'id': '3',
-              'pickup_location': 'University Campus',
-              'dropoff_location': 'Train Station',
-              'driver_name': 'Mike Davis',
-              'fare': 12.25,
-              'status': 'completed',
-              'date': '2024-01-10 16:45',
-              'rating': 4.0,
-            },
-            {
-              'id': '4',
-              'pickup_location': 'Shopping Mall',
-              'dropoff_location': 'Home Address',
-              'driver_name': 'Lisa Brown',
-              'fare': 18.90,
-              'status': 'completed',
-              'date': '2024-01-08 19:20',
-              'rating': 4.8,
-            },
-          ];
+          _rideHistory = rideHistory;
         });
       }
     } catch (e) {
@@ -92,6 +56,10 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
         : status == 'cancelled'
         ? Colors.red
         : Colors.orange;
+
+    final isCustomer = _userRole == 'customer' || _userRole == null;
+    final otherPartyLabel = isCustomer ? 'Driver' : 'Customer';
+    final otherPartyName = ride['other_party_name'] ?? 'Unknown';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
@@ -146,14 +114,14 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                 const Icon(Icons.person_outline, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  'Driver: ${ride['driver_name']}',
+                  '$otherPartyLabel: $otherPartyName',
                   style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 ),
                 const Spacer(),
                 const Icon(Icons.star, size: 16, color: Colors.amber),
                 const SizedBox(width: 4),
                 Text(
-                  ride['rating'].toString(),
+                  ride['rating'] > 0 ? ride['rating'].toString() : 'No rating',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
@@ -161,6 +129,24 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                 ),
               ],
             ),
+            if (isCustomer && ride['vehicle_info'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_car,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      ride['vehicle_info'],
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -249,22 +235,26 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
                 ],
               ),
             )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_rideHistory.length} Completed Rides',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+          : RefreshIndicator(
+              onRefresh: _loadRideHistory,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_rideHistory.length} ${_userRole == 'driver' ? 'Completed Trips' : 'Completed Rides'}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ..._rideHistory.map(_buildRideCard),
-                ],
+                    const SizedBox(height: 16),
+                    ..._rideHistory.map(_buildRideCard),
+                  ],
+                ),
               ),
             ),
     );

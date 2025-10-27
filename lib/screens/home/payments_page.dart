@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/services/payment_service.dart';
 
@@ -30,40 +29,16 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
       if (_customerId != null) {
         // Load payment history and saved methods
-        await Future.delayed(const Duration(seconds: 1)); // Simulate loading
+        final paymentHistory = await PaymentService.getPaymentHistory(
+          _customerId!,
+        );
 
         final savedMethods = await PaymentService.getSavedPaymentMethods(
           _customerId!,
         );
 
         setState(() {
-          _paymentHistory = [
-            {
-              'id': '1',
-              'amount': 15.50,
-              'description': 'Ride to Downtown Mall',
-              'date': '2024-01-15 14:30',
-              'status': 'completed',
-              'payment_method': 'Visa ****4242',
-            },
-            {
-              'id': '2',
-              'amount': 32.75,
-              'description': 'Ride from Airport',
-              'date': '2024-01-12 09:15',
-              'status': 'completed',
-              'payment_method': 'Visa ****4242',
-            },
-            {
-              'id': '3',
-              'amount': 12.25,
-              'description': 'Ride to Train Station',
-              'date': '2024-01-10 16:45',
-              'status': 'refunded',
-              'payment_method': 'Mastercard ****8888',
-            },
-          ];
-
+          _paymentHistory = paymentHistory;
           _savedPaymentMethods = savedMethods;
         });
       }
@@ -288,22 +263,26 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             ],
                           ),
                         )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${_paymentHistory.length} Payments',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                      : RefreshIndicator(
+                          onRefresh: _loadPaymentData,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_paymentHistory.length} Payments',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
-                              ..._paymentHistory.map(_buildPaymentCard),
-                            ],
+                                const SizedBox(height: 16),
+                                ..._paymentHistory.map(_buildPaymentCard),
+                              ],
+                            ),
                           ),
                         ),
 

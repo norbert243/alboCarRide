@@ -52,8 +52,19 @@ class AuthService {
       print(
         '🔐 AuthService.initialize: Supabase session after restore = ${supabaseSession != null ? "✅ EXISTS" : "❌ NULL"}',
       );
+
+      // Additional debug: Check if we have tokens in secure storage
+      final accessToken = await _secureStorage.read(key: _accessTokenKey);
+      final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
+      print(
+        '🔐 AuthService.initialize: accessToken in storage = ${accessToken != null ? "EXISTS" : "NULL"}',
+      );
+      print(
+        '🔐 AuthService.initialize: refreshToken in storage = ${refreshToken != null ? "EXISTS" : "NULL"}',
+      );
     } catch (e) {
       print('❌ Error initializing auth service: $e');
+      print('❌ Stack trace: ${e.toString()}');
     }
   }
 
@@ -184,25 +195,22 @@ class AuthService {
       // Check local session validity first
       final hasLocalSession = await _hasValidLocalSession();
       print('🔐 AuthService.isLoggedIn: hasLocalSession = $hasLocalSession');
-      if (!hasLocalSession) {
-        print('🔐 AuthService.isLoggedIn: ❌ No valid local session found');
-        return false;
+
+      // Check if we have Supabase session
+      final supabaseSession = Supabase.instance.client.auth.currentSession;
+      print(
+        '🔐 AuthService.isLoggedIn: supabaseSession = ${supabaseSession != null ? "EXISTS" : "NULL"}',
+      );
+
+      // If we have local session but no Supabase session, we're still considered logged in
+      // The user will be redirected to login if Supabase session restoration fails
+      if (hasLocalSession) {
+        print('🔐 AuthService.isLoggedIn: ✅ User has local session data');
+        return true;
       }
 
-      // Check if session needs refresh
-      final needsRefresh = await _needsRefresh();
-      print('🔐 AuthService.isLoggedIn: needsRefresh = $needsRefresh');
-      if (needsRefresh) {
-        print(
-          '🔐 AuthService.isLoggedIn: Session needs refresh, attempting refresh...',
-        );
-        final refreshed = await _refreshSession();
-        print('🔐 AuthService.isLoggedIn: refreshSession result = $refreshed');
-        return refreshed;
-      }
-
-      print('🔐 AuthService.isLoggedIn: ✅ Session is valid');
-      return true;
+      print('🔐 AuthService.isLoggedIn: ❌ No valid local session found');
+      return false;
     } catch (e) {
       print('❌ Error checking login status: $e');
       return false;
@@ -360,23 +368,31 @@ class AuthService {
 
           if (currentSession == null) {
             print(
-              'AuthService._restoreSessionFromSecureStorage: Session restoration failed, clearing invalid session',
+              'AuthService._restoreSessionFromSecureStorage: Session restoration failed, but keeping local session for manual login',
             );
-            await clearSession();
+            // Don't clear session immediately - let user try to login manually
+            // await clearSession();
           }
         } catch (e) {
           print('Error setting session: $e');
-          await clearSession();
+          print(
+            'This is normal if tokens are expired - user will need to login again',
+          );
+          // Don't clear session on error - let the user login manually
+          // await clearSession();
         }
       } else {
         print(
           'AuthService._restoreSessionFromSecureStorage: Missing tokens, cannot restore session',
         );
-        await clearSession();
+        // Don't clear session if tokens are missing - user might have logged out
+        // await clearSession();
       }
     } catch (e) {
       print('Error restoring session: $e');
-      await clearSession();
+      print('Keeping local session data for manual login');
+      // Don't clear session on general errors
+      // await clearSession();
     }
   }
 

@@ -71,6 +71,9 @@ dependencies:
 
   # Location services for driver tracking
   geolocator: ^11.0.1
+  
+  # Google Maps integration
+  google_maps_flutter: ^2.5.0
 
 dev_dependencies:
   flutter_test:
