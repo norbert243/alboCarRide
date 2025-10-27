@@ -25,7 +25,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkAndRoute();
+    // Delay routing until after first frame to avoid black screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndRoute();
+    });
   }
 
   Future<void> _checkAndRoute() async {
@@ -247,56 +250,83 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _navigateToRoleSelection() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/role-selection',
-      (route) => false,
-    );
+    if (!mounted) return;
+
+    // Use a slight delay to ensure widget tree is ready
+    Future.microtask(() {
+      if (!mounted) return;
+
+      print('🔐 AuthWrapper: Navigating to role selection...');
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/role-selection',
+        (route) => false,
+      );
+      print('🔐 AuthWrapper: Navigation to role selection completed');
+    });
   }
 
   void _navigateToSignup() {
-    Navigator.pushNamedAndRemoveUntil(context, '/signup', (route) => false);
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil('/signup', (route) => false);
+    });
   }
 
   void _navigateToCustomerHome() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/customer_home',
-      (route) => false,
-    );
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/customer_home',
+        (route) => false,
+      );
+    });
   }
 
   void _navigateToVehicleType(String driverId) {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/vehicle-type-selection',
-      (route) => false,
-      arguments: driverId,
-    );
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/vehicle-type-selection',
+        (route) => false,
+        arguments: driverId,
+      );
+    });
   }
 
   void _navigateToVerification() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/verification',
-      (route) => false,
-    );
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/verification',
+        (route) => false,
+      );
+    });
   }
 
   void _navigateToWaitingReview() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/waiting-review',
-      (route) => false,
-    );
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/waiting-review',
+        (route) => false,
+      );
+    });
   }
 
   void _navigateToEnhancedDriverHome() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/enhanced-driver-home',
-      (route) => false,
-    );
+    if (!mounted) return;
+    Future.microtask(() {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/enhanced-driver-home',
+        (route) => false,
+      );
+    });
   }
 
   @override
