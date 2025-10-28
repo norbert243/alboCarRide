@@ -16,23 +16,39 @@ class _BookRidePageState extends State<BookRidePage> {
   final _pickupController = TextEditingController();
   final _dropoffController = TextEditingController();
   final _notesController = TextEditingController();
+  final _suggestedPriceController = TextEditingController();
 
   bool _isLoading = false;
   bool _isCalculatingFare = false;
   String? _customerId;
   double? _estimatedFare;
+  bool _showPriceNegotiation = false;
   List<Map<String, dynamic>> _pickupSuggestions = [];
   List<Map<String, dynamic>> _dropoffSuggestions = [];
   FocusNode _pickupFocusNode = FocusNode();
   FocusNode _dropoffFocusNode = FocusNode();
   bool _showPickupSuggestions = false;
   bool _showDropoffSuggestions = false;
+  double? _userLatitude;
+  double? _userLongitude;
 
   @override
   void initState() {
     super.initState();
     _loadCustomerId();
     _setupFocusListeners();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    final position = await LocationService.getCurrentLocation();
+    if (position != null) {
+      setState(() {
+        _userLatitude = position.latitude;
+        _userLongitude = position.longitude;
+      });
+      print('📍 User location set: $_userLatitude, $_userLongitude');
+    }
   }
 
   @override
@@ -40,6 +56,7 @@ class _BookRidePageState extends State<BookRidePage> {
     _pickupController.dispose();
     _dropoffController.dispose();
     _notesController.dispose();
+    _suggestedPriceController.dispose();
     _pickupFocusNode.dispose();
     _dropoffFocusNode.dispose();
     super.dispose();
@@ -69,7 +86,11 @@ class _BookRidePageState extends State<BookRidePage> {
 
   Future<void> _onPickupChanged(String value) async {
     if (value.length > 2) {
-      final suggestions = await LocationService.getPlaceSuggestions(value);
+      final suggestions = await LocationService.getPlaceSuggestions(
+        value,
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+      );
       setState(() {
         _pickupSuggestions = suggestions;
         _showPickupSuggestions = true;
@@ -85,7 +106,11 @@ class _BookRidePageState extends State<BookRidePage> {
 
   Future<void> _onDropoffChanged(String value) async {
     if (value.length > 2) {
-      final suggestions = await LocationService.getPlaceSuggestions(value);
+      final suggestions = await LocationService.getPlaceSuggestions(
+        value,
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+      );
       setState(() {
         _dropoffSuggestions = suggestions;
         _showDropoffSuggestions = true;
@@ -157,12 +182,18 @@ class _BookRidePageState extends State<BookRidePage> {
       setState(() {
         _estimatedFare = fare;
         _isCalculatingFare = false;
+        _showPriceNegotiation = fare != null;
+        // Set suggested price to estimated fare by default
+        if (fare != null) {
+          _suggestedPriceController.text = fare.toStringAsFixed(2);
+        }
       });
     } catch (e) {
       print('Error calculating fare: $e');
       setState(() {
         _estimatedFare = null;
         _isCalculatingFare = false;
+        _showPriceNegotiation = false;
       });
     }
   }
@@ -181,6 +212,11 @@ class _BookRidePageState extends State<BookRidePage> {
         return;
       }
 
+      // Get suggested price or use estimated fare
+      final suggestedPrice = _suggestedPriceController.text.isNotEmpty
+          ? double.tryParse(_suggestedPriceController.text)
+          : _estimatedFare;
+
       // Create ride request in database
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
@@ -190,6 +226,8 @@ class _BookRidePageState extends State<BookRidePage> {
             'notes': _notesController.text.isNotEmpty
                 ? _notesController.text
                 : null,
+            'estimated_fare': _estimatedFare,
+            'suggested_price': suggestedPrice,
             'status': 'pending',
             'created_at': DateTime.now().toIso8601String(),
           }).select();
@@ -422,6 +460,110 @@ class _BookRidePageState extends State<BookRidePage> {
                   ],
                 ),
               ),
+
+              // Price Negotiation Section
+              if (_showPriceNegotiation) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withAlpha(26),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withAlpha(51)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.payments_outlined,
+                            color: Colors.green[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Suggest Your Price',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You can adjust the price around the estimated fare. Minimum price is \$3.00',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _suggestedPriceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Your Suggested Price',
+                          labelStyle: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                          hintText: '0.00',
+                          prefixText: '\$ ',
+                          prefixStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.green[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.green[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.green[600]!,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 16,
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a price';
+                          }
+                          final price = double.tryParse(value);
+                          if (price == null) {
+                            return 'Please enter a valid price';
+                          }
+                          if (price < 3.0) {
+                            return 'Minimum price is \$3.00';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

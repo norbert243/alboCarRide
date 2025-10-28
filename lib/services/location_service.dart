@@ -1,18 +1,71 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import '../config/api_config.dart';
 
 class LocationService {
-  /// Get place suggestions for autocomplete
+  /// Get user's current location
+  static Future<Position?> getCurrentLocation() async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print('❌ Location services are disabled');
+        return null;
+      }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          print('❌ Location permissions are denied');
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        print('❌ Location permissions are permanently denied');
+        return null;
+      }
+
+      // Get current position
+      print('📍 Getting current location...');
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      print('📍 Current location: ${position.latitude}, ${position.longitude}');
+      return position;
+    } catch (e) {
+      print('❌ Error getting current location: $e');
+      return null;
+    }
+  }
+
+  /// Get place suggestions for autocomplete with location biasing
   static Future<List<Map<String, dynamic>>> getPlaceSuggestions(
-    String query,
-  ) async {
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) async {
     if (query.isEmpty) return [];
 
     try {
       final apiKey = ApiConfig.googleMapsApiKey;
-      final url =
-          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey';
+
+      // Build URL with location biasing if coordinates are provided
+      String url = '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey';
+
+      // Add location biasing to prioritize nearby results
+      if (latitude != null && longitude != null) {
+        // Add location parameter to bias results near the user
+        url += '&location=$latitude,$longitude';
+        // Add radius of 50km (50000 meters) to search within
+        url += '&radius=50000';
+        // Strict bounds to only show results within this area
+        url += '&strictbounds';
+        print('📍 Using location bias: $latitude, $longitude (50km radius)');
+      }
 
       print('🔍 LocationService: Making Places API request');
       print('🔍 URL: $url');
