@@ -77,3 +77,17 @@ doc/api/
 # Environment variables
 .env
 .env.*
+
+# Documentation and summary files (too many, confusing for AI)
+BLACK_SCREEN_DEBUG_SUMMARY.md
+FINAL_SUMMARY_FOR_BOSS.md
+FIX_BLACK_SCREEN.md
+SHOW_YOUR_BOSS.md
+WHATS_NEXT.md
+BLACK_SCREEN_FIX_SUMMARY.md
+FOR_BOSS_README.md
+TODAYS_WORK_SUMMARY.md
+GIT_COMMIT_INSTRUCTIONS.md
+
+# IDE specific
+.claude/

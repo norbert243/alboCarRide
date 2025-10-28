@@ -5,8 +5,6 @@ class RoleSelectionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('✅ RoleSelectionPage: Building UI...');
-
     return Scaffold(
       backgroundColor: Colors.grey[50] ?? const Color(0xFFFAFAFA),
       body: SafeArea(

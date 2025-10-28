@@ -21,6 +21,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final SupabaseClient _supabase = Supabase.instance.client;
   bool _isLoading = true;
+  Widget? _targetPage;
 
   @override
   void initState() {
@@ -252,85 +253,68 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _navigateToRoleSelection() {
     if (!mounted) return;
 
-    // Use a slight delay to ensure widget tree is ready
-    Future.microtask(() {
-      if (!mounted) return;
-
-      print('🔐 AuthWrapper: Navigating to role selection...');
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/role-selection',
-        (route) => false,
-      );
-      print('🔐 AuthWrapper: Navigation to role selection completed');
+    setState(() {
+      _targetPage = const RoleSelectionPage();
+      _isLoading = false;
     });
   }
 
   void _navigateToSignup() {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/signup', (route) => false);
+    setState(() {
+      _targetPage = const SignupPage(role: 'customer');
+      _isLoading = false;
     });
   }
 
   void _navigateToCustomerHome() {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/customer_home',
-        (route) => false,
-      );
+    setState(() {
+      _targetPage = const CustomerHomePage();
+      _isLoading = false;
     });
   }
 
   void _navigateToVehicleType(String driverId) {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/vehicle-type-selection',
-        (route) => false,
-        arguments: driverId,
-      );
+    setState(() {
+      _targetPage = VehicleTypeSelectionPage(driverId: driverId);
+      _isLoading = false;
     });
   }
 
   void _navigateToVerification() {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/verification',
-        (route) => false,
-      );
+    setState(() {
+      _targetPage = const VerificationPage();
+      _isLoading = false;
     });
   }
 
   void _navigateToWaitingReview() {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/waiting-review',
-        (route) => false,
-      );
+    setState(() {
+      _targetPage = const WaitingForReviewPage();
+      _isLoading = false;
     });
   }
 
   void _navigateToEnhancedDriverHome() {
     if (!mounted) return;
-    Future.microtask(() {
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/enhanced-driver-home',
-        (route) => false,
-      );
+    setState(() {
+      _targetPage = const EnhancedDriverHomePage();
+      _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    // If target page is set, return it directly
+    if (_targetPage != null) {
+      return _targetPage!;
+    }
+
+    // Otherwise show loading screen
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
