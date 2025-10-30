@@ -14,11 +14,15 @@ import 'package:albocarride/screens/auth/vehicle_details_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
+import 'package:albocarride/screens/home/driver_dashboard_v2.dart';
+import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
 import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
+import 'package:albocarride/screens/trips/driver_live_trip_screen.dart';
+import 'package:albocarride/screens/rides/driver_ride_request_screen.dart';
 import 'package:albocarride/services/auth_service.dart';
 
 // Background message handler (must be a top-level function)
@@ -195,7 +199,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const CustomerHomePage(),
+      home: const EnhancedDriverHomePage(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
@@ -226,6 +230,33 @@ class MyApp extends StatelessWidget {
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),
+        '/driver-dashboard-v2': (context) {
+          final driverId =
+              ModalRoute.of(context)!.settings.arguments as String? ??
+              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
+          return DriverDashboardV2(driverId: driverId);
+        },
+        '/driver-dashboard-v2-realtime': (context) {
+          // Pass driver id from logged-in profile; for testing you can pass the test id:
+          final driverId =
+              ModalRoute.of(context)?.settings.arguments as String? ??
+              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
+          return DriverDashboardV2Realtime(driverId: driverId);
+        },
+        '/driver-live-trip': (context) {
+          final args =
+              ModalRoute.of(context)?.settings.arguments
+                  as Map<String, dynamic>?;
+          return DriverLiveTripScreen(
+            tripId: args?['tripId'] ?? '',
+            driverId: args?['driverId'] ?? '',
+          );
+        },
+        '/driver-ride-request': (context) {
+          final driverId =
+              ModalRoute.of(context)?.settings.arguments as String? ?? '';
+          return DriverRideRequestScreen(driverId: driverId);
+        },
       },
     );
   }

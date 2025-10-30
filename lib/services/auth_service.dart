@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -107,7 +106,7 @@ class AuthService {
             .single()
             .catchError((_) => null);
 
-        _currentUserRole = profileResponse?['role'] ?? 'customer';
+        _currentUserRole = profileResponse['role'] ?? 'customer';
 
         print(
           '✅ Session restored successfully: User ${currentUser.id} authenticated',

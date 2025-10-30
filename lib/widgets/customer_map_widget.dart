@@ -258,7 +258,7 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${driver.vehicleType.toUpperCase()}',
+                  driver.vehicleType.toUpperCase(),
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ],

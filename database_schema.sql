@@ -165,6 +165,16 @@ CREATE TABLE notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Wallets table for user balances
+CREATE TABLE wallets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
+    balance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    currency VARCHAR(3) DEFAULT 'ZAR',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Indexes for better performance
 CREATE INDEX idx_profiles_role ON profiles(role);
 CREATE INDEX idx_drivers_online ON drivers(is_online);
@@ -179,6 +189,7 @@ CREATE INDEX idx_payments_status ON payments(status);
 CREATE INDEX idx_ride_locations_ride ON ride_locations(ride_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(is_read);
+CREATE INDEX idx_wallets_user ON wallets(user_id);
 
 -- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -208,6 +219,9 @@ CREATE TRIGGER update_driver_earnings_updated_at BEFORE UPDATE ON driver_earning
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_driver_documents_updated_at BEFORE UPDATE ON driver_documents
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_wallets_updated_at BEFORE UPDATE ON wallets
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Insert sample data (optional)

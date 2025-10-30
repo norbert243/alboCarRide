@@ -38,7 +38,7 @@ class DocumentService {
       // Generate filename
       final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
       final extension = p.extension(file.path);
-      final fileName = '${documentType}_${timestamp}$extension';
+      final fileName = '${documentType}_$timestamp$extension';
 
       // IMPORTANT: Storage path must start with driverId for RLS
       final storagePath = '$driverId/$fileName';
