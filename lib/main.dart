@@ -18,6 +18,7 @@ import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
+import 'package:albocarride/screens/home/my_ride_requests_page.dart';
 import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/screens/debug/session_debug_page.dart';
 import 'package:albocarride/services/session_service.dart';
@@ -219,6 +220,7 @@ class MyApp extends StatelessWidget {
             const ComprehensiveDriverDashboard(),
         '/customer_home': (context) => const CustomerHomePage(),
         '/book-ride': (context) => const BookRidePage(),
+        '/my-ride-requests': (context) => const MyRideRequestsPage(),
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),

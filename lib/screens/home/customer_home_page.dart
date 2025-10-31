@@ -1,9 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/services/session_service.dart';
 
-class CustomerHomePage extends StatelessWidget {
+class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
+
+  @override
+  State<CustomerHomePage> createState() => _CustomerHomePageState();
+}
+
+class _CustomerHomePageState extends State<CustomerHomePage> {
+  List<Map<String, dynamic>> _recentTrips = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentTrips();
+  }
+
+  Future<void> _loadRecentTrips() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final customerId = await SessionService.getUserIdStatic();
+      if (customerId != null) {
+        final response = await Supabase.instance.client
+            .from('trips')
+            .select('id, dropoff_location, status, final_price')
+            .eq('customer_id', customerId)
+            .order('created_at', ascending: false)
+            .limit(3);
+
+        setState(() {
+          _recentTrips = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      print('Error loading recent trips: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _signOut(BuildContext context) async {
     await AuthService.clearSession();
@@ -111,6 +152,12 @@ class CustomerHomePage extends StatelessWidget {
                   onTap: () => Navigator.pushNamed(context, '/book-ride'),
                 ),
                 _buildActionCard(
+                  icon: Icons.pending_actions,
+                  title: 'My Requests',
+                  color: Colors.blue,
+                  onTap: () => Navigator.pushNamed(context, '/my-ride-requests'),
+                ),
+                _buildActionCard(
                   icon: Icons.history,
                   title: 'Ride History',
                   color: Colors.orange,
@@ -121,12 +168,6 @@ class CustomerHomePage extends StatelessWidget {
                   title: 'Payment',
                   color: Colors.purple,
                   onTap: () => Navigator.pushNamed(context, '/payments'),
-                ),
-                _buildActionCard(
-                  icon: Icons.support_agent,
-                  title: 'Support',
-                  color: Colors.red,
-                  onTap: () => Navigator.pushNamed(context, '/support'),
                 ),
               ],
             ),
@@ -142,24 +183,32 @@ class CustomerHomePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildActivityItem(
-              'Ride to Downtown',
-              'Completed • \$15.50',
-              Icons.check_circle,
-              Colors.green,
-            ),
-            _buildActivityItem(
-              'Ride to Airport',
-              'Cancelled • \$0.00',
-              Icons.cancel,
-              Colors.red,
-            ),
-            _buildActivityItem(
-              'Ride to Mall',
-              'Completed • \$12.75',
-              Icons.check_circle,
-              Colors.green,
-            ),
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _recentTrips.isEmpty
+                    ? _buildNoActivity()
+                    : Column(
+                        children: _recentTrips.map((trip) {
+                          final status = trip['status'] ?? 'Unknown';
+                          final color = status == 'completed'
+                              ? Colors.green
+                              : status == 'cancelled'
+                                  ? Colors.red
+                                  : Colors.orange;
+                          final icon = status == 'completed'
+                              ? Icons.check_circle
+                              : status == 'cancelled'
+                                  ? Icons.cancel
+                                  : Icons.hourglass_empty;
+
+                          return _buildActivityItem(
+                            'Ride to ${trip['dropoff_location'] ?? 'Unknown'}',
+                            '$status • \$${(trip['final_price'] ?? 0).toStringAsFixed(2)}',
+                            icon,
+                            color,
+                          );
+                        }).toList(),
+                      ),
           ],
         ),
       ),
@@ -205,6 +254,42 @@ class CustomerHomePage extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoActivity() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.history_toggle_off_outlined,
+              size: 48,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No Recent Activity',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Your recent rides will appear here.',
+              style: TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

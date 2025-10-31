@@ -16,6 +16,10 @@ class DriverLocationService {
   bool _isTracking = false;
   String? _currentDriverId;
 
+  // Stream for broadcasting location updates to the UI
+  final _locationStreamController = StreamController<Position>.broadcast();
+  Stream<Position> get locationStream => _locationStreamController.stream;
+
   /// Start background location tracking for driver
   Future<void> startLocationTracking() async {
     if (_isTracking) return;
@@ -134,6 +138,9 @@ class DriverLocationService {
   Future<void> _handleLocationUpdate(Position position) async {
     if (!_isTracking || _currentDriverId == null) return;
 
+    // Broadcast the location update to any listeners
+    _locationStreamController.add(position);
+
     try {
       await _updateDriverLocationInDatabase(
         _currentDriverId!,
@@ -241,6 +248,7 @@ class DriverLocationService {
   /// Clean up resources
   void dispose() {
     _stopLocationUpdates();
+    _locationStreamController.close(); // Close the stream
     _isTracking = false;
     _currentDriverId = null;
   }

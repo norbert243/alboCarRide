@@ -27,62 +27,65 @@ class _RideHistoryPageState extends State<RideHistoryPage> {
       _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
-        // In a real implementation, this would query the ride_requests table
-        // For demo purposes, we'll use sample data
-        await Future.delayed(const Duration(seconds: 1)); // Simulate loading
+        // Query completed trips from the database
+        final response = await Supabase.instance.client
+            .from('trips')
+            .select('''
+              id,
+              pickup_location,
+              dropoff_location,
+              final_price,
+              status,
+              start_time,
+              end_time,
+              driver_rating,
+              driver_id,
+              profiles!trips_driver_id_fkey(full_name)
+            ''')
+            .eq('customer_id', _customerId!)
+            .inFilter('status', ['completed', 'cancelled'])
+            .order('end_time', ascending: false);
+
+        final trips = response as List<dynamic>;
 
         setState(() {
-          _rideHistory = [
-            {
-              'id': '1',
-              'pickup_location': '123 Main Street',
-              'dropoff_location': 'Downtown Mall',
-              'driver_name': 'John Smith',
-              'fare': 15.50,
-              'status': 'completed',
-              'date': '2024-01-15 14:30',
-              'rating': 4.5,
-            },
-            {
-              'id': '2',
-              'pickup_location': 'Airport Terminal A',
-              'dropoff_location': 'City Center Hotel',
-              'driver_name': 'Sarah Johnson',
-              'fare': 32.75,
-              'status': 'completed',
-              'date': '2024-01-12 09:15',
-              'rating': 5.0,
-            },
-            {
-              'id': '3',
-              'pickup_location': 'University Campus',
-              'dropoff_location': 'Train Station',
-              'driver_name': 'Mike Davis',
-              'fare': 12.25,
-              'status': 'completed',
-              'date': '2024-01-10 16:45',
-              'rating': 4.0,
-            },
-            {
-              'id': '4',
-              'pickup_location': 'Shopping Mall',
-              'dropoff_location': 'Home Address',
-              'driver_name': 'Lisa Brown',
-              'fare': 18.90,
-              'status': 'completed',
-              'date': '2024-01-08 19:20',
-              'rating': 4.8,
-            },
-          ];
+          _rideHistory = trips.map((trip) {
+            final driverProfile = trip['profiles'] as Map<String, dynamic>?;
+            final driverName = driverProfile?['full_name'] ?? 'Unknown Driver';
+            final fare = (trip['final_price'] as num?)?.toDouble() ?? 0.0;
+            final rating = (trip['driver_rating'] as num?)?.toDouble() ?? 0.0;
+            final endTime = trip['end_time'] != null
+                ? DateTime.parse(trip['end_time'] as String)
+                : DateTime.now();
+
+            return {
+              'id': trip['id'],
+              'pickup_location': trip['pickup_location'] ?? 'Unknown pickup',
+              'dropoff_location': trip['dropoff_location'] ?? 'Unknown destination',
+              'driver_name': driverName,
+              'fare': fare,
+              'status': trip['status'] ?? 'completed',
+              'date': _formatDateTime(endTime),
+              'rating': rating,
+            };
+          }).toList();
         });
       }
     } catch (e) {
       print('Error loading ride history: $e');
+      // Show empty state if there's an error
+      setState(() {
+        _rideHistory = [];
+      });
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildRideCard(Map<String, dynamic> ride) {

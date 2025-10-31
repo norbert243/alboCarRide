@@ -54,7 +54,8 @@ class LocationService {
       final apiKey = ApiConfig.googleMapsApiKey;
 
       // Build URL with location biasing if coordinates are provided
-      String url = '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey';
+      String url =
+          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey&components=country:ZA|country:LS|country:BW|country:ZW|country:SZ';
 
       // Add location biasing to prioritize nearby results
       if (latitude != null && longitude != null) {
@@ -62,8 +63,6 @@ class LocationService {
         url += '&location=$latitude,$longitude';
         // Add radius of 50km (50000 meters) to search within
         url += '&radius=50000';
-        // Strict bounds to only show results within this area
-        url += '&strictbounds';
         print('📍 Using location bias: $latitude, $longitude (50km radius)');
       }
 
@@ -187,7 +186,7 @@ class LocationService {
     try {
       final apiKey = ApiConfig.googleMapsApiKey;
       final url =
-          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=$apiKey';
+          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=$apiKey&components=country:ZA|country:LS|country:BW|country:ZW|country:SZ';
 
       print('🔍 LocationService: Making Geocoding API request');
       print('🔍 URL: $url');
@@ -252,5 +251,21 @@ class LocationService {
     }
 
     return null;
+  }
+
+  static double calculateDistance(
+    double startLatitude,
+    double startLongitude,
+    double endLatitude,
+    double endLongitude,
+  ) {
+    final distanceInMeters = Geolocator.distanceBetween(
+      startLatitude,
+      startLongitude,
+      endLatitude,
+      endLongitude,
+    );
+    // Convert meters to miles
+    return distanceInMeters / 1609.34;
   }
 }

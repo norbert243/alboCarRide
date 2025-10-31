@@ -1,0 +1,5 @@
+ALTER TABLE ride_requests
+ADD COLUMN pickup_latitude DOUBLE PRECISION,
+ADD COLUMN pickup_longitude DOUBLE PRECISION,
+ADD COLUMN dropoff_latitude DOUBLE PRECISION,
+ADD COLUMN dropoff_longitude DOUBLE PRECISION;

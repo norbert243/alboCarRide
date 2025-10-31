@@ -29,51 +29,94 @@ class _PaymentsPageState extends State<PaymentsPage> {
       _customerId = await SessionService.getUserIdStatic();
 
       if (_customerId != null) {
-        // Load payment history and saved methods
-        await Future.delayed(const Duration(seconds: 1)); // Simulate loading
+        // Load actual payment history from trips table
+        final tripsResponse = await Supabase.instance.client
+            .from('trips')
+            .select('''
+              id,
+              pickup_location,
+              dropoff_location,
+              final_price,
+              status,
+              end_time,
+              payment_method_id
+            ''')
+            .eq('customer_id', _customerId!)
+            .inFilter('status', ['completed', 'refunded'])
+            .order('end_time', ascending: false);
 
+        final trips = tripsResponse as List<dynamic>;
+
+        // Load saved payment methods
         final savedMethods = await PaymentService.getSavedPaymentMethods(
           _customerId!,
         );
 
         setState(() {
-          _paymentHistory = [
-            {
-              'id': '1',
-              'amount': 15.50,
-              'description': 'Ride to Downtown Mall',
-              'date': '2024-01-15 14:30',
-              'status': 'completed',
-              'payment_method': 'Visa ****4242',
-            },
-            {
-              'id': '2',
-              'amount': 32.75,
-              'description': 'Ride from Airport',
-              'date': '2024-01-12 09:15',
-              'status': 'completed',
-              'payment_method': 'Visa ****4242',
-            },
-            {
-              'id': '3',
-              'amount': 12.25,
-              'description': 'Ride to Train Station',
-              'date': '2024-01-10 16:45',
-              'status': 'refunded',
-              'payment_method': 'Mastercard ****8888',
-            },
-          ];
+          _paymentHistory = trips.map((trip) {
+            final fare = (trip['final_price'] as num?)?.toDouble() ?? 0.0;
+            final endTime = trip['end_time'] != null
+                ? DateTime.parse(trip['end_time'] as String)
+                : DateTime.now();
+            final pickupLocation = trip['pickup_location'] ?? 'Unknown pickup';
+            final dropoffLocation = trip['dropoff_location'] ?? 'Unknown destination';
+
+            // Try to get payment method info
+            String paymentMethod = 'Cash';
+            final paymentMethodId = trip['payment_method_id'];
+            if (paymentMethodId != null) {
+              final savedMethod = savedMethods.firstWhere(
+                (method) => method['id'] == paymentMethodId,
+                orElse: () => <String, dynamic>{},
+              );
+              if (savedMethod.isNotEmpty) {
+                final card = savedMethod['card'] as Map<String, dynamic>?;
+                if (card != null) {
+                  final brand = card['brand'] ?? 'Card';
+                  final last4 = card['last4'] ?? '****';
+                  paymentMethod = '$brand ****$last4';
+                }
+              }
+            }
+
+            return {
+              'id': trip['id'],
+              'amount': fare,
+              'description': 'Ride from ${_shortenLocation(pickupLocation)} to ${_shortenLocation(dropoffLocation)}',
+              'date': _formatDateTime(endTime),
+              'status': trip['status'] ?? 'completed',
+              'payment_method': paymentMethod,
+            };
+          }).toList();
 
           _savedPaymentMethods = savedMethods;
         });
       }
     } catch (e) {
       print('Error loading payment data: $e');
+      // Show empty state if there's an error
+      setState(() {
+        _paymentHistory = [];
+        _savedPaymentMethods = [];
+      });
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _shortenLocation(String location) {
+    // Shorten location to first part before comma if too long
+    if (location.length > 30) {
+      final parts = location.split(',');
+      return parts.isNotEmpty ? parts[0] : location.substring(0, 30);
+    }
+    return location;
   }
 
   Widget _buildPaymentCard(Map<String, dynamic> payment) {

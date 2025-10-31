@@ -21,6 +21,17 @@ class _SignupPageState extends State<SignupPage> {
   final _fullNameController = TextEditingController();
 
   bool _isLoading = false;
+  String _selectedCountryCode = '+27'; // Default to South Africa
+
+  // Country codes for Southern African countries
+  final List<Map<String, String>> _countryCodes = [
+    {'name': 'South Africa', 'code': '+27', 'flag': '🇿🇦'},
+    {'name': 'Lesotho', 'code': '+266', 'flag': '🇱🇸'},
+    {'name': 'Botswana', 'code': '+267', 'flag': '🇧🇼'},
+    {'name': 'Zimbabwe', 'code': '+263', 'flag': '🇿🇼'},
+    {'name': 'Eswatini', 'code': '+268', 'flag': '🇸🇿'},
+    {'name': 'DRC', 'code': '+243', 'flag': '🇨🇩'},
+  ];
 
   @override
   void dispose() {
@@ -35,7 +46,7 @@ class _SignupPageState extends State<SignupPage> {
     setState(() => _isLoading = true);
 
     try {
-      final phoneNumber = '+27${_phoneController.text}';
+      final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
       final fullName = _fullNameController.text;
 
       // Call Supabase Edge Function to send OTP
@@ -156,30 +167,70 @@ class _SignupPageState extends State<SignupPage> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: InputDecoration(
-                    labelText: 'Phone Number',
-                    prefixText: '+27 ',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Country code dropdown
+                    Container(
+                      width: 120,
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedCountryCode,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                        ),
+                        items: _countryCodes.map((country) {
+                          return DropdownMenuItem<String>(
+                            value: country['code'],
+                            child: Text(
+                              '${country['flag']} ${country['code']}',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _selectedCountryCode = value;
+                            });
+                          }
+                        },
+                      ),
                     ),
-                    prefixIcon: const Icon(Icons.phone_outlined),
-                    hintText: '812345678',
-                  ),
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
+                    const SizedBox(width: 12),
+                    // Phone number input
+                    Expanded(
+                      child: TextFormField(
+                        controller: _phoneController,
+                        decoration: InputDecoration(
+                          labelText: 'Phone Number',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.phone_outlined),
+                          hintText: '812345678',
+                        ),
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your phone number';
+                          }
+                          if (value.length < 9) {
+                            return 'Please enter a valid phone number';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
                   ],
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your phone number';
-                    }
-                    if (value.length < 9) {
-                      return 'Please enter a valid phone number';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 24),
                 Text(

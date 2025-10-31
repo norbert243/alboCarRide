@@ -8,9 +8,12 @@ import 'package:albocarride/services/driver_deposit_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/trip_card_widget.dart';
 import 'package:albocarride/widgets/offer_board.dart';
+import 'package:albocarride/widgets/available_rides_widget.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import '../driver/verification_page.dart';
 import '../driver/waiting_for_review_page.dart';
+import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 
 class ComprehensiveDriverDashboard extends StatefulWidget {
   const ComprehensiveDriverDashboard({super.key});
@@ -50,14 +53,29 @@ class _ComprehensiveDriverDashboardState
   // Recent trips
   List<Map<String, dynamic>> _recentTrips = [];
 
+  Position? _driverLocation;
+  StreamSubscription<Position>? _locationSubscription;
+
   @override
   void initState() {
     super.initState();
     _initializeDriver();
+    _subscribeToLocationUpdates();
+  }
+
+  void _subscribeToLocationUpdates() {
+    _locationSubscription = _locationService.locationStream.listen((Position position) {
+      if (mounted) {
+        setState(() {
+          _driverLocation = position;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _locationSubscription?.cancel();
     _locationService.dispose();
     _matchingService.dispose();
     super.dispose();
@@ -236,7 +254,7 @@ class _ComprehensiveDriverDashboardState
 
   Future<void> _checkActiveTrip() async {
     try {
-      final activeTrip = await _tripService.getActiveTrip(_driverId!);
+      final activeTrip = await _tripService.getActiveTrip(_driverId!);;
       if (activeTrip != null) {
         final trip = Trip.fromMap(activeTrip);
         setState(() {
@@ -847,7 +865,7 @@ class _ComprehensiveDriverDashboardState
     );
   }
 
-  Widget _buildOfferBoard() {
+  Widget _buildAvailableRides() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -864,16 +882,37 @@ class _ComprehensiveDriverDashboardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Available Rides',
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on,
+                color: Colors.blue,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Available Ride Requests',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select a ride to accept and start earning',
             style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+              fontSize: 14,
+              color: Colors.grey[600],
             ),
           ),
           const SizedBox(height: 16),
-          const OfferBoard(),
+          SizedBox(
+            height: 400,
+            child: AvailableRidesWidget(driverLocation: _driverLocation),
+          ),
         ],
       ),
     );
@@ -926,9 +965,9 @@ class _ComprehensiveDriverDashboardState
             _buildRecentTrips(),
             const SizedBox(height: 16),
 
-            // Offer board (only when online and no active trip)
+            // Available ride requests (only when online and no active trip)
             if (_isOnline && !_hasActiveTrip) ...[
-              _buildOfferBoard(),
+              _buildAvailableRides(),
               const SizedBox(height: 16),
             ],
           ],

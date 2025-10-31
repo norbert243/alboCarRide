@@ -217,12 +217,45 @@ class _BookRidePageState extends State<BookRidePage> {
           ? double.tryParse(_suggestedPriceController.text)
           : _estimatedFare;
 
+      // Get coordinates for pickup location
+      final pickupDetails = await LocationService.geocodeAddress(
+        _pickupController.text,
+      );
+      if (pickupDetails == null) {
+        CustomToast.showError(
+          context: context,
+          message: 'Could not find pickup location details',
+        );
+        return;
+      }
+
+      // Get coordinates for dropoff location
+      final dropoffDetails = await LocationService.geocodeAddress(
+        _dropoffController.text,
+      );
+      if (dropoffDetails == null) {
+        CustomToast.showError(
+          context: context,
+          message: 'Could not find dropoff location details',
+        );
+        return;
+      }
+
+      final pickupLat = pickupDetails['latitude'] as double;
+      final pickupLng = pickupDetails['longitude'] as double;
+      final dropoffLat = dropoffDetails['latitude'] as double;
+      final dropoffLng = dropoffDetails['longitude'] as double;
+
       // Create ride request in database
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
             'customer_id': _customerId,
             'pickup_location': _pickupController.text,
+            'pickup_latitude': pickupLat,
+            'pickup_longitude': pickupLng,
             'dropoff_location': _dropoffController.text,
+            'dropoff_latitude': dropoffLat,
+            'dropoff_longitude': dropoffLng,
             'notes': _notesController.text.isNotEmpty
                 ? _notesController.text
                 : null,
