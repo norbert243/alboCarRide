@@ -114,14 +114,15 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   Future<void> _loadOnlineStatus() async {
     try {
+      // Load online status from drivers table (used by RideMatchingService)
       final response = await Supabase.instance.client
-          .from('profiles')
+          .from('drivers')
           .select('is_online')
           .eq('id', _driverId!)
-          .single();
+          .maybeSingle();
 
       setState(() {
-        _isOnline = response['is_online'] ?? false;
+        _isOnline = response?['is_online'] ?? false;
       });
     } catch (e) {
       debugPrint('Error loading online status: $e');
@@ -174,24 +175,22 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
     try {
       final newStatus = !_isOnline;
 
+      // Update online status in drivers table (this is what RideMatchingService queries)
       await Supabase.instance.client
-          .from('profiles')
+          .from('drivers')
           .update({'is_online': newStatus})
           .eq('id', _driverId!);
 
       setState(() => _isOnline = newStatus);
 
-      // Start/stop location tracking and matching service based on online status
+      // Start/stop location tracking based on online status
+      // Note: RideMatchingService runs globally and is already started in main.dart
       if (newStatus) {
         // Start location tracking when going online
         await _locationService.startLocationTracking();
-        // Start matching service to listen for ride requests
-        await _matchingService.startMatchingService();
       } else {
         // Stop location tracking when going offline
         await _locationService.stopLocationTracking();
-        // Stop matching service
-        await _matchingService.stopMatchingService();
       }
 
       debugPrint('Online status updated: $newStatus');

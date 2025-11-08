@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/services/location_service.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/widgets/ride_map_widget.dart';
 
 class BookRidePage extends StatefulWidget {
   const BookRidePage({super.key});
@@ -31,6 +33,11 @@ class _BookRidePageState extends State<BookRidePage> {
   bool _showDropoffSuggestions = false;
   double? _userLatitude;
   double? _userLongitude;
+  double? _pickupLatitude;
+  double? _pickupLongitude;
+  double? _dropoffLatitude;
+  double? _dropoffLongitude;
+  List<LatLng> _routePolyline = [];
 
   @override
   void initState() {
@@ -124,19 +131,43 @@ class _BookRidePageState extends State<BookRidePage> {
     _calculateFare();
   }
 
-  void _selectPickupSuggestion(Map<String, dynamic> suggestion) {
+  void _selectPickupSuggestion(Map<String, dynamic> suggestion) async {
     _pickupController.text = suggestion['description'];
     setState(() {
       _showPickupSuggestions = false;
     });
+
+    // Get coordinates for the selected pickup location
+    final pickupDetails = await LocationService.geocodeAddress(
+      suggestion['description'],
+    );
+    if (pickupDetails != null) {
+      setState(() {
+        _pickupLatitude = pickupDetails['latitude'] as double?;
+        _pickupLongitude = pickupDetails['longitude'] as double?;
+      });
+    }
+
     _calculateFare();
   }
 
-  void _selectDropoffSuggestion(Map<String, dynamic> suggestion) {
+  void _selectDropoffSuggestion(Map<String, dynamic> suggestion) async {
     _dropoffController.text = suggestion['description'];
     setState(() {
       _showDropoffSuggestions = false;
     });
+
+    // Get coordinates for the selected dropoff location
+    final dropoffDetails = await LocationService.geocodeAddress(
+      suggestion['description'],
+    );
+    if (dropoffDetails != null) {
+      setState(() {
+        _dropoffLatitude = dropoffDetails['latitude'] as double?;
+        _dropoffLongitude = dropoffDetails['longitude'] as double?;
+      });
+    }
+
     _calculateFare();
   }
 
@@ -171,7 +202,7 @@ class _BookRidePageState extends State<BookRidePage> {
       final dropoffLat = dropoffDetails['latitude'] as double;
       final dropoffLng = dropoffDetails['longitude'] as double;
 
-      // Calculate fare
+      // Calculate fare and get route polyline
       final fare = await LocationService.estimateFare(
         pickupLat,
         pickupLng,
@@ -179,7 +210,20 @@ class _BookRidePageState extends State<BookRidePage> {
         dropoffLng,
       );
 
+      // Get route polyline for map display
+      final polyline = await LocationService.getRoutePolyline(
+        pickupLat,
+        pickupLng,
+        dropoffLat,
+        dropoffLng,
+      );
+
       setState(() {
+        _pickupLatitude = pickupLat;
+        _pickupLongitude = pickupLng;
+        _dropoffLatitude = dropoffLat;
+        _dropoffLongitude = dropoffLng;
+        _routePolyline = polyline;
         _estimatedFare = fare;
         _isCalculatingFare = false;
         _showPriceNegotiation = fare != null;
@@ -247,20 +291,21 @@ class _BookRidePageState extends State<BookRidePage> {
       final dropoffLng = dropoffDetails['longitude'] as double;
 
       // Create ride request in database
+      // Note: Using 'rider_id' to match RideMatchingService expectations
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
-            'customer_id': _customerId,
-            'pickup_location': _pickupController.text,
-            'pickup_latitude': pickupLat,
-            'pickup_longitude': pickupLng,
-            'dropoff_location': _dropoffController.text,
-            'dropoff_latitude': dropoffLat,
-            'dropoff_longitude': dropoffLng,
+            'rider_id': _customerId,
+            'pickup_address': _pickupController.text,
+            'pickup_lat': pickupLat,
+            'pickup_lng': pickupLng,
+            'dropoff_address': _dropoffController.text,
+            'dropoff_lat': dropoffLat,
+            'dropoff_lng': dropoffLng,
             'notes': _notesController.text.isNotEmpty
                 ? _notesController.text
                 : null,
             'estimated_fare': _estimatedFare,
-            'suggested_price': suggestedPrice,
+            'proposed_price': suggestedPrice,
             'status': 'pending',
             'created_at': DateTime.now().toIso8601String(),
           }).select();
@@ -312,6 +357,27 @@ class _BookRidePageState extends State<BookRidePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Map Widget
+              if (_pickupLatitude != null || _userLatitude != null)
+                Column(
+                  children: [
+                    RideMapWidget(
+                      currentLat: _userLatitude,
+                      currentLng: _userLongitude,
+                      pickupLat: _pickupLatitude,
+                      pickupLng: _pickupLongitude,
+                      dropoffLat: _dropoffLatitude,
+                      dropoffLng: _dropoffLongitude,
+                      pickupAddress: _pickupController.text,
+                      dropoffAddress: _dropoffController.text,
+                      polylinePoints: _routePolyline,
+                      height: 250,
+                      showCurrentLocation: true,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+
               // Header
               const Text(
                 'Where would you like to go?',

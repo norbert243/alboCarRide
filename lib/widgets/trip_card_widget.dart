@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/trip_service.dart';
+import '../services/location_service.dart';
+import '../services/driver_location_service.dart';
 import '../models/trip.dart';
 import '../widgets/custom_toast.dart';
+import '../widgets/ride_map_widget.dart';
 
 /// Widget that displays active trip information and controls
 class TripCardWidget extends StatefulWidget {
@@ -22,7 +27,85 @@ class TripCardWidget extends StatefulWidget {
 
 class _TripCardWidgetState extends State<TripCardWidget> {
   final TripService _tripService = TripService();
+  final DriverLocationService _locationService = DriverLocationService();
   bool _isLoading = false;
+  bool _isLoadingLocation = true;
+  double? _driverLat;
+  double? _driverLng;
+  double? _pickupLat;
+  double? _pickupLng;
+  double? _dropoffLat;
+  double? _dropoffLng;
+  String? _pickupAddress;
+  String? _dropoffAddress;
+  List<LatLng> _routePolyline = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationData();
+  }
+
+  Future<void> _loadLocationData() async {
+    setState(() => _isLoadingLocation = true);
+
+    try {
+      // Get driver's current location
+      final position = await _locationService.getCurrentLocation();
+      if (position != null && mounted) {
+        setState(() {
+          _driverLat = position.latitude;
+          _driverLng = position.longitude;
+        });
+      }
+
+      // Fetch ride request details using the trip's requestId
+      final request = await Supabase.instance.client
+          .from('ride_requests')
+          .select(
+            'pickup_address, dropoff_address, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng',
+          )
+          .eq('id', widget.trip.requestId)
+          .maybeSingle();
+
+      if (request != null && mounted) {
+        final pickupLat = request['pickup_lat'] as double?;
+        final pickupLng = request['pickup_lng'] as double?;
+        final dropoffLat = request['dropoff_lat'] as double?;
+        final dropoffLng = request['dropoff_lng'] as double?;
+
+        // Fetch route polyline
+        List<LatLng> polyline = [];
+        if (pickupLat != null &&
+            pickupLng != null &&
+            dropoffLat != null &&
+            dropoffLng != null) {
+          polyline = await LocationService.getRoutePolyline(
+            pickupLat,
+            pickupLng,
+            dropoffLat,
+            dropoffLng,
+          );
+        }
+
+        setState(() {
+          _pickupAddress = request['pickup_address'];
+          _dropoffAddress = request['dropoff_address'];
+          _pickupLat = pickupLat;
+          _pickupLng = pickupLng;
+          _dropoffLat = dropoffLat;
+          _dropoffLng = dropoffLng;
+          _routePolyline = polyline;
+        });
+      }
+    } catch (e) {
+      print('Error loading location data: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingLocation = false);
+      }
+    }
+  }
 
   String _getStatusText(String status) {
     switch (status) {
@@ -260,7 +343,49 @@ class _TripCardWidgetState extends State<TripCardWidget> {
             ),
             const SizedBox(height: 16),
 
+            // Map Widget
+            if (!_isLoadingLocation && _pickupLat != null && _pickupLng != null)
+              Column(
+                children: [
+                  RideMapWidget(
+                    currentLat: _driverLat,
+                    currentLng: _driverLng,
+                    pickupLat: _pickupLat,
+                    pickupLng: _pickupLng,
+                    dropoffLat: _dropoffLat,
+                    dropoffLng: _dropoffLng,
+                    pickupAddress: _pickupAddress,
+                    dropoffAddress: _dropoffAddress,
+                    polylinePoints: _routePolyline,
+                    height: 250,
+                    showCurrentLocation: true,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+
+            // Loading indicator for map
+            if (_isLoadingLocation)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+
             // Trip details
+            if (_pickupAddress != null)
+              _buildInfoRow(
+                Icons.location_on,
+                'Pickup:',
+                _pickupAddress!,
+              ),
+            if (_dropoffAddress != null)
+              _buildInfoRow(
+                Icons.flag,
+                'Dropoff:',
+                _dropoffAddress!,
+              ),
             _buildInfoRow(Icons.person, 'Rider ID:', trip.riderId),
             _buildInfoRow(Icons.directions_car, 'Driver ID:', trip.driverId),
             _buildInfoRow(

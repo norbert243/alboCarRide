@@ -22,6 +22,7 @@ import 'package:albocarride/screens/home/my_ride_requests_page.dart';
 import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/screens/debug/session_debug_page.dart';
 import 'package:albocarride/services/session_service.dart';
+import 'package:albocarride/services/ride_matching_service.dart';
 
 // Background message handler (must be a top-level function)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -57,6 +58,15 @@ Future<void> main() async {
 
   // Initialize session service
   SessionService().initialize();
+
+  // Start ride matching service to handle ride requests globally
+  print('main: Starting RideMatchingService...');
+  try {
+    await RideMatchingService().startMatchingService();
+    print('main: RideMatchingService started successfully');
+  } catch (e) {
+    print('main: Error starting RideMatchingService: $e');
+  }
 
   runApp(const MyApp());
 }

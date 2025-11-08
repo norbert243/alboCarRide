@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/ride_matching_service.dart';
 import '../services/session_service.dart';
+import '../services/location_service.dart';
+import '../services/driver_location_service.dart';
 import 'custom_toast.dart';
+import 'ride_map_widget.dart';
 
 /// Widget that displays ride offers and allows drivers to manage them
 class OfferBoard extends StatefulWidget {
@@ -14,8 +18,12 @@ class OfferBoard extends StatefulWidget {
 
 class _OfferBoardState extends State<OfferBoard> {
   final RideMatchingService _matchingService = RideMatchingService();
+  final DriverLocationService _locationService = DriverLocationService();
   late Stream<List<Map<String, dynamic>>> _offersStream;
   bool _isLoading = false;
+  double? _driverLat;
+  double? _driverLng;
+  Map<String, List<LatLng>> _routePolylines = {}; // Cache for polylines
 
   @override
   void initState() {
@@ -32,30 +40,94 @@ class _OfferBoardState extends State<OfferBoard> {
     }
 
     if (driverId != null) {
-      // Start the matching service to listen for offers
-      await _matchingService.startMatchingService();
+      // Get driver's current location
+      final position = await _locationService.getCurrentLocation();
+      if (position != null) {
+        setState(() {
+          _driverLat = position.latitude;
+          _driverLng = position.longitude;
+        });
+      }
 
-      // Subscribe to offers stream (this would need to be implemented in RideMatchingService)
+      // Subscribe to offers stream
+      // Note: RideMatchingService is already running globally (started in main.dart)
       _offersStream = _watchPendingOffers(driverId);
     } else {
       _offersStream = Stream.value([]);
     }
   }
 
-  /// Watch pending offers for a driver
+  /// Watch pending offers for a driver with ride request details
   Stream<List<Map<String, dynamic>>> _watchPendingOffers(String driverId) {
     return _matchingService.supabaseClient
         .from('ride_offers')
         .stream(primaryKey: ['id'])
-        .map(
-          (events) => events
+        .asyncMap((events) async {
+          final pendingOffers = events
               .where(
                 (offer) =>
                     offer['driver_id'] == driverId &&
                     offer['status'] == 'pending',
               )
-              .toList(),
-        );
+              .toList();
+
+          // Fetch ride request details for each offer
+          final enrichedOffers = <Map<String, dynamic>>[];
+          for (final offer in pendingOffers) {
+            try {
+              final requestId = offer['request_id'];
+              if (requestId != null) {
+                final request = await _matchingService.supabaseClient
+                    .from('ride_requests')
+                    .select(
+                      'pickup_address, dropoff_address, rider_id, notes, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng',
+                    )
+                    .eq('id', requestId)
+                    .maybeSingle();
+
+                if (request != null) {
+                  final pickupLat = request['pickup_lat'] as double?;
+                  final pickupLng = request['pickup_lng'] as double?;
+                  final dropoffLat = request['dropoff_lat'] as double?;
+                  final dropoffLng = request['dropoff_lng'] as double?;
+
+                  // Fetch route polyline for map display
+                  List<LatLng> polyline = [];
+                  if (pickupLat != null &&
+                      pickupLng != null &&
+                      dropoffLat != null &&
+                      dropoffLng != null) {
+                    final offerId = offer['id'] as String;
+                    polyline = await LocationService.getRoutePolyline(
+                      pickupLat,
+                      pickupLng,
+                      dropoffLat,
+                      dropoffLng,
+                    );
+                    _routePolylines[offerId] = polyline;
+                  }
+
+                  enrichedOffers.add({
+                    ...offer,
+                    'pickup_address': request['pickup_address'],
+                    'dropoff_address': request['dropoff_address'],
+                    'rider_id': request['rider_id'],
+                    'notes': request['notes'],
+                    'pickup_lat': pickupLat,
+                    'pickup_lng': pickupLng,
+                    'dropoff_lat': dropoffLat,
+                    'dropoff_lng': dropoffLng,
+                  });
+                }
+              }
+            } catch (e) {
+              print('Error fetching request details: $e');
+              // Still include the offer even if we can't get request details
+              enrichedOffers.add(offer);
+            }
+          }
+          return enrichedOffers;
+        });
   }
 
   Future<void> _handleAcceptOffer(Map<String, dynamic> offer) async {
@@ -182,6 +254,12 @@ class _OfferBoardState extends State<OfferBoard> {
   }
 
   Widget _buildOfferCard(Map<String, dynamic> offer) {
+    final pickupLat = offer['pickup_lat'] as double?;
+    final pickupLng = offer['pickup_lng'] as double?;
+    final dropoffLat = offer['dropoff_lat'] as double?;
+    final dropoffLng = offer['dropoff_lng'] as double?;
+    final offerId = offer['id'] as String;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 3,
@@ -210,10 +288,45 @@ class _OfferBoardState extends State<OfferBoard> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // These fields would need to be joined from ride_requests table
-            _buildInfoRow(Icons.location_on, 'Pickup:', 'Loading...'),
-            _buildInfoRow(Icons.flag, 'Destination:', 'Loading...'),
+            const SizedBox(height: 16),
+
+            // Map Widget
+            if (pickupLat != null && pickupLng != null)
+              Column(
+                children: [
+                  RideMapWidget(
+                    currentLat: _driverLat,
+                    currentLng: _driverLng,
+                    pickupLat: pickupLat,
+                    pickupLng: pickupLng,
+                    dropoffLat: dropoffLat,
+                    dropoffLng: dropoffLng,
+                    pickupAddress: offer['pickup_address'],
+                    dropoffAddress: offer['dropoff_address'],
+                    polylinePoints: _routePolylines[offerId] ?? [],
+                    height: 200,
+                    showCurrentLocation: true,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+
+            _buildInfoRow(
+              Icons.location_on,
+              'Pickup:',
+              offer['pickup_address'] ?? 'Not available',
+            ),
+            _buildInfoRow(
+              Icons.flag,
+              'Destination:',
+              offer['dropoff_address'] ?? 'Not available',
+            ),
+            if (offer['notes'] != null && (offer['notes'] as String).isNotEmpty)
+              _buildInfoRow(
+                Icons.note_outlined,
+                'Notes:',
+                offer['notes'] as String,
+              ),
             _buildInfoRow(
               Icons.access_time,
               'Received:',
