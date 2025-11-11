@@ -7,6 +7,7 @@ import 'package:albocarride/services/auth_service.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OtpVerificationPage extends StatefulWidget {
   final String phoneNumber;
@@ -25,8 +26,10 @@ class OtpVerificationPage extends StatefulWidget {
 }
 
 class _OtpVerificationPageState extends State<OtpVerificationPage> {
-  final List<TextEditingController> _otpControllers =
-      List.generate(6, (_) => TextEditingController());
+  final List<TextEditingController> _otpControllers = List.generate(
+    6,
+    (_) => TextEditingController(),
+  );
   final List<FocusNode> _otpFocusNodes = List.generate(6, (_) => FocusNode());
 
   bool _isLoading = false;
@@ -111,10 +114,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         // Sign in with the credentials provided by the backend
         if (email != null && password != null) {
           try {
-            final authResponse = await Supabase.instance.client.auth.signInWithPassword(
-              email: email,
-              password: password,
-            );
+            final authResponse = await Supabase.instance.client.auth
+                .signInWithPassword(email: email, password: password);
 
             if (authResponse.session != null) {
               // Save session with tokens
@@ -128,25 +129,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           } catch (signInError) {
             print('Sign in error: $signInError');
             // Fallback: save basic session info without tokens
-            await AuthService.saveSession(
-              userId: userId,
-              userPhone: widget.phoneNumber,
-              userRole: role,
-              expiry: DateTime.now().add(const Duration(days: 30)),
-              accessToken: null,
-              refreshToken: null,
-            );
+            await _saveBasicSessionInfo(userId, widget.phoneNumber, role);
           }
         } else {
           // Fallback: save basic session info without tokens
-          await AuthService.saveSession(
-            userId: userId,
-            userPhone: widget.phoneNumber,
-            userRole: role,
-            expiry: DateTime.now().add(const Duration(days: 30)),
-            accessToken: null,
-            refreshToken: null,
-          );
+          await _saveBasicSessionInfo(userId, widget.phoneNumber, role);
         }
 
         if (mounted) {
@@ -159,13 +146,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           await _navigateBasedOnUserStatus(role, userId, isNewUser);
         }
       } else {
-        final errorMessage = responseData['error'] ?? 'Incorrect verification code';
+        final errorMessage =
+            responseData['error'] ?? 'Incorrect verification code';
 
         if (mounted) {
-          CustomToast.showError(
-            context: context,
-            message: errorMessage,
-          );
+          CustomToast.showError(context: context, message: errorMessage);
         }
 
         // Clear OTP fields on error
@@ -179,7 +164,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       if (mounted) {
         CustomToast.showError(
           context: context,
-          message: 'Connection error. Please check your internet and try again.',
+          message:
+              'Connection error. Please check your internet and try again.',
         );
       }
     } finally {
@@ -200,25 +186,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           ? DateTime.fromMillisecondsSinceEpoch(session.expiresAt! * 1000)
           : DateTime.now().add(const Duration(days: 30));
 
-      await AuthService.saveSession(
-        userId: userId,
-        userPhone: phoneNumber,
-        userRole: role,
-        expiry: expiry,
-        accessToken: session.accessToken,
-        refreshToken: session.refreshToken,
-      );
+      await AuthService.saveSession(session);
     } catch (e) {
       print('Error saving session: $e');
       // Fallback: save basic info without tokens
-      await AuthService.saveSession(
-        userId: userId,
-        userPhone: phoneNumber,
-        userRole: role,
-        expiry: DateTime.now().add(const Duration(days: 30)),
-        accessToken: null,
-        refreshToken: null,
-      );
+      await _saveBasicSessionInfo(userId, phoneNumber, role);
     }
   }
 
@@ -324,6 +296,29 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     }
   }
 
+  /// Save basic session information when we don't have a full Supabase session
+  Future<void> _saveBasicSessionInfo(
+    String userId,
+    String phoneNumber,
+    String role,
+  ) async {
+    try {
+      // Use SharedPreferences to store basic session info
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_id', userId);
+      await prefs.setString('user_phone', phoneNumber);
+      await prefs.setString('user_role', role);
+      await prefs.setString(
+        'session_expiry',
+        DateTime.now().add(const Duration(days: 30)).toIso8601String(),
+      );
+
+      print('✅ Basic session info saved for user: $userId');
+    } catch (e) {
+      print('❌ Error saving basic session info: $e');
+    }
+  }
+
   Future<void> _resendOtp() async {
     if (_isResending || _secondsRemaining > 0) return;
 
@@ -339,9 +334,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $supabaseAnonKey',
         },
-        body: jsonEncode({
-          'phoneNumber': widget.phoneNumber,
-        }),
+        body: jsonEncode({'phoneNumber': widget.phoneNumber}),
       );
 
       if (response.statusCode == 200) {
@@ -412,10 +405,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
               const SizedBox(height: 12),
               Text(
                 'We sent a code to ${widget.phoneNumber}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 40),
               // OTP Input Fields
@@ -441,11 +431,17 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                         fillColor: Colors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                          borderSide: BorderSide(
+                            color: Colors.grey[400]!,
+                            width: 1.5,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[400]!, width: 1.5),
+                          borderSide: BorderSide(
+                            color: Colors.grey[400]!,
+                            width: 1.5,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -454,11 +450,11 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                             width: 2,
                           ),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                        ),
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: (value) {
                         if (value.isNotEmpty && index < 5) {
                           _otpFocusNodes[index + 1].requestFocus();
@@ -525,8 +521,9 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                         width: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(

@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/api_config.dart';
 
 class LocationService {
@@ -199,5 +201,125 @@ class LocationService {
     }
 
     return null;
+  }
+
+  /// Calculate distance between two points using Haversine formula
+  static double calculateDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const double earthRadius = 6371; // Earth's radius in kilometers
+
+    double dLat = _degreesToRadians(lat2 - lat1);
+    double dLon = _degreesToRadians(lon2 - lon1);
+
+    double a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(_degreesToRadians(lat1)) *
+            cos(_degreesToRadians(lat2)) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
+
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    double distance = earthRadius * c;
+
+    // Convert to miles
+    return distance * 0.621371;
+  }
+
+  /// Get route polyline between two points
+  static Future<List<LatLng>> getRoutePolyline(
+    double originLat,
+    double originLng,
+    double destLat,
+    double destLng,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConfig.directionsEndpoint}?'
+          'origin=$originLat,$originLng&'
+          'destination=$destLat,$destLng&'
+          'key=${ApiConfig.googleMapsApiKey}',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final routes = data['routes'] as List?;
+
+        if (routes != null && routes.isNotEmpty) {
+          final route = routes.first;
+          final overviewPolyline = route['overview_polyline'];
+          final points = overviewPolyline?['points'] as String?;
+
+          if (points != null) {
+            return _decodePolyline(points);
+          }
+        }
+      }
+    } catch (e) {
+      print('Error getting route polyline: $e');
+    }
+
+    return [];
+  }
+
+  /// Decode Google Maps polyline string to list of LatLng points
+  static List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> points = [];
+    int index = 0, len = encoded.length;
+    int lat = 0, lng = 0;
+
+    while (index < len) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      points.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+
+    return points;
+  }
+
+  static double _degreesToRadians(double degrees) {
+    return degrees * pi / 180;
+  }
+}
+
+class FareCalculator {
+  /// Calculate fare based on distance and time
+  static double calculateFare(double distanceMiles, int durationMinutes) {
+    // Base fare
+    double baseFare = 2.50;
+
+    // Distance rate (per mile)
+    double distanceRate = 1.75;
+
+    // Time rate (per minute)
+    double timeRate = 0.25;
+
+    // Calculate total fare
+    double distanceFare = distanceMiles * distanceRate;
+    double timeFare = durationMinutes * timeRate;
+
+    return baseFare + distanceFare + timeFare;
   }
 }

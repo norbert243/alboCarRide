@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
-import 'package:albocarride/widgets/navigation_header.dart';
 import 'package:albocarride/widgets/driver_map_widget.dart';
 
 class EnhancedDriverHomePage extends StatefulWidget {
@@ -96,11 +94,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'Schedule',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Schedule',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -156,11 +175,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'Earnings Summary',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Earnings Summary',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -231,11 +271,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'Settings',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Settings',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -320,11 +381,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'Notifications',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -384,11 +466,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'Privacy & Safety',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Privacy & Safety',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -444,11 +547,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: 'About',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'About',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -504,11 +628,32 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         ),
         child: Column(
           children: [
-            // Header using standardized modal navigation
-            ModalNavigationHeader(
-              title: _isOnline ? 'You\'re Online!' : 'You\'re Offline',
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isOnline ? 'You\'re Online!' : 'You\'re Offline',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Content
             Expanded(
@@ -843,8 +988,39 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                         const SizedBox(height: 12),
                         const Divider(height: 1),
                         const SizedBox(height: 12),
-                        // 🚀 Embed Realtime Dashboard
-                        DriverDashboardV2Realtime(driverId: driverId),
+                        // Simple dashboard stats
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceAround,
+                                children: [
+                                  _buildDashboardStat('8', 'Completed Rides'),
+                                  _buildDashboardStat(
+                                    'R245.50',
+                                    'Today\'s Earnings',
+                                  ),
+                                  _buildDashboardStat('4.8', 'Rating'),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Driver Performance Dashboard',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1083,4 +1259,21 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       ),
     );
   }
+}
+
+Widget _buildDashboardStat(String value, String label) {
+  return Column(
+    children: [
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+    ],
+  );
 }

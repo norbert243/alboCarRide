@@ -111,14 +111,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
 
       // Save session for future use using AuthService
-      await AuthService.saveSession(
-        userId: user.id,
-        userPhone: userPhone,
-        userRole: role,
-        expiry: DateTime.now().add(const Duration(days: 30)),
-        accessToken: _supabase.auth.currentSession?.accessToken,
-        refreshToken: _supabase.auth.currentSession?.refreshToken,
-      );
+      final currentSession = _supabase.auth.currentSession!;
+      await AuthService.saveSession(currentSession);
 
       debugPrint(
         'AuthWrapper: Session saved for user: ${user.id} with role: $role',
