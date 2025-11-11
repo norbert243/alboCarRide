@@ -37,6 +37,12 @@ class DocumentUploadService {
     String? customFileName,
   }) async {
     try {
+      // Security validation: Ensure userId matches the authenticated user
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser?.id != userId) {
+        throw Exception('Cannot upload documents for another user');
+      }
+
       // Validate file size before processing
       final fileSize = await file.length();
       if (fileSize > _maxFileSize) {
@@ -168,6 +174,12 @@ class DocumentUploadService {
   /// Lists all documents for a user
   Future<List<Map<String, dynamic>>> listUserDocuments(String userId) async {
     try {
+      // Security validation: Ensure userId matches the authenticated user
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser?.id != userId) {
+        throw Exception('Cannot fetch documents for another user');
+      }
+
       final response = await _supabase.storage
           .from(_storageBucket)
           .list(path: userId);

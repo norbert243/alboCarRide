@@ -1,71 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/api_config.dart';
 
 class LocationService {
-  /// Get user's current location
-  static Future<Position?> getCurrentLocation() async {
-    try {
-      // Check if location services are enabled
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        print('❌ Location services are disabled');
-        return null;
-      }
-
-      // Check location permissions
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          print('❌ Location permissions are denied');
-          return null;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        print('❌ Location permissions are permanently denied');
-        return null;
-      }
-
-      // Get current position
-      print('📍 Getting current location...');
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      print('📍 Current location: ${position.latitude}, ${position.longitude}');
-      return position;
-    } catch (e) {
-      print('❌ Error getting current location: $e');
-      return null;
-    }
-  }
-
-  /// Get place suggestions for autocomplete with location biasing
+  /// Get place suggestions for autocomplete
   static Future<List<Map<String, dynamic>>> getPlaceSuggestions(
-    String query, {
-    double? latitude,
-    double? longitude,
-  }) async {
+    String query,
+  ) async {
     if (query.isEmpty) return [];
 
     try {
       final apiKey = ApiConfig.googleMapsApiKey;
-
-      // Build URL with location biasing if coordinates are provided
-      String url =
-          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey&components=country:ZA|country:LS|country:BW|country:ZW|country:SZ';
-
-      // Add location biasing to prioritize nearby results
-      if (latitude != null && longitude != null) {
-        // Add location parameter to bias results near the user
-        url += '&location=$latitude,$longitude';
-        // Add radius of 50km (50000 meters) to search within
-        url += '&radius=50000';
-        print('📍 Using location bias: $latitude, $longitude (50km radius)');
-      }
+      final url =
+          '${ApiConfig.placesAutocompleteEndpoint}?input=$query&key=$apiKey';
 
       print('🔍 LocationService: Making Places API request');
       print('🔍 URL: $url');
@@ -187,7 +134,7 @@ class LocationService {
     try {
       final apiKey = ApiConfig.googleMapsApiKey;
       final url =
-          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=$apiKey&components=country:ZA|country:LS|country:BW|country:ZW|country:SZ';
+          '${ApiConfig.geocodingEndpoint}?address=${Uri.encodeComponent(address)}&key=$apiKey';
 
       print('🔍 LocationService: Making Geocoding API request');
       print('🔍 URL: $url');
@@ -252,95 +199,5 @@ class LocationService {
     }
 
     return null;
-  }
-
-  static double calculateDistance(
-    double startLatitude,
-    double startLongitude,
-    double endLatitude,
-    double endLongitude,
-  ) {
-    final distanceInMeters = Geolocator.distanceBetween(
-      startLatitude,
-      startLongitude,
-      endLatitude,
-      endLongitude,
-    );
-    // Convert meters to miles
-    return distanceInMeters / 1609.34;
-  }
-
-  /// Get route polyline points from Google Directions API
-  static Future<List<LatLng>> getRoutePolyline(
-    double originLat,
-    double originLng,
-    double destLat,
-    double destLng,
-  ) async {
-    try {
-      final response = await http.get(
-        Uri.parse(
-          '${ApiConfig.directionsEndpoint}?'
-          'origin=$originLat,$originLng&'
-          'destination=$destLat,$destLng&'
-          'key=${ApiConfig.googleMapsApiKey}',
-        ),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final routes = data['routes'] as List?;
-
-        if (routes != null && routes.isNotEmpty) {
-          final route = routes.first;
-          final polyline =
-              route['overview_polyline']?['points'] as String?;
-
-          if (polyline != null) {
-            return _decodePolyline(polyline);
-          }
-        }
-      }
-    } catch (e) {
-      print('Error getting route polyline: $e');
-    }
-
-    return [];
-  }
-
-  /// Decode Google Maps polyline string to list of LatLng points
-  static List<LatLng> _decodePolyline(String encoded) {
-    List<LatLng> points = [];
-    int index = 0;
-    int len = encoded.length;
-    int lat = 0;
-    int lng = 0;
-
-    while (index < len) {
-      int b;
-      int shift = 0;
-      int result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      lng += dlng;
-
-      points.add(LatLng(lat / 1E5, lng / 1E5));
-    }
-
-    return points;
   }
 }
