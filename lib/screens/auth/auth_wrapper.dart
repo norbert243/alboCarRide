@@ -8,7 +8,6 @@ import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
-import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/services/session_service.dart';
 
 class AuthWrapper extends StatefulWidget {
@@ -105,7 +104,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
       final userPhone = user.phone ?? user.email ?? '';
       debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
@@ -160,7 +159,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
 
       debugPrint('User authenticated successfully:');

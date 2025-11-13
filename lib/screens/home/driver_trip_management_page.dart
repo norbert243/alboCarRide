@@ -7,8 +7,7 @@ import 'package:albocarride/widgets/custom_toast.dart';
 class DriverTripManagementPage extends StatefulWidget {
   final String tripId;
 
-  const DriverTripManagementPage({Key? key, required this.tripId})
-    : super(key: key);
+  const DriverTripManagementPage({super.key, required this.tripId});
 
   @override
   State<DriverTripManagementPage> createState() =>

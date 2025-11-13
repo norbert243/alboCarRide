@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/location_service.dart';
-import 'package:albocarride/services/driver_location_service.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 

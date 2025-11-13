@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'lib/services/ride_matching_service.dart';
-import 'lib/services/session_service.dart';
 
 /// Test script for the Ride Matching Service
 /// This script tests the matching service functionality

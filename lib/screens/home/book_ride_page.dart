@@ -27,8 +27,8 @@ class _BookRidePageState extends State<BookRidePage> {
   bool _showPriceNegotiation = false;
   List<Map<String, dynamic>> _pickupSuggestions = [];
   List<Map<String, dynamic>> _dropoffSuggestions = [];
-  FocusNode _pickupFocusNode = FocusNode();
-  FocusNode _dropoffFocusNode = FocusNode();
+  final FocusNode _pickupFocusNode = FocusNode();
+  final FocusNode _dropoffFocusNode = FocusNode();
   bool _showPickupSuggestions = false;
   bool _showDropoffSuggestions = false;
   double? _userLatitude;
@@ -291,24 +291,19 @@ class _BookRidePageState extends State<BookRidePage> {
       final dropoffLng = dropoffDetails['longitude'] as double;
 
       // Create ride request in database
-      // Note: Using 'rider_id' to match RideMatchingService expectations
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
-            'rider_id': _customerId,
-            'pickup_address': _pickupController.text,
-            'pickup_lat': pickupLat,
-            'pickup_lng': pickupLng,
-            'dropoff_address': _dropoffController.text,
-            'dropoff_lat': dropoffLat,
-            'dropoff_lng': dropoffLng,
-            'notes': _notesController.text.isNotEmpty
-                ? _notesController.text
-                : null,
-            'estimated_fare': _estimatedFare,
-            'proposed_price': suggestedPrice,
-            'status': 'pending',
-            'created_at': DateTime.now().toIso8601String(),
-          }).select();
+        'customer_id': _customerId,
+        'pickup_address': _pickupController.text,
+        'pickup_latitude': pickupLat,
+        'pickup_longitude': pickupLng,
+        'dropoff_address': _dropoffController.text,
+        'dropoff_latitude': dropoffLat,
+        'dropoff_longitude': dropoffLng,
+        'estimated_price': _estimatedFare,
+        'status': 'pending',
+        'request_time': DateTime.now().toIso8601String(),
+      }).select();
 
       if (response.isNotEmpty) {
         CustomToast.showSuccess(

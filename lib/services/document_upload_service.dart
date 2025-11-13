@@ -86,15 +86,15 @@ class DocumentUploadService {
         print('  Message: ${e.message}');
         print('  Status code: ${e.statusCode}');
 
-        if (e.message?.contains('bucket') ?? false) {
+        if (e.message.contains('bucket') ?? false) {
           throw Exception(
             'Storage bucket not found. Please ensure the "driver-documents" bucket is created in Supabase Storage. Error: ${e.message}',
           );
-        } else if (e.message?.contains('permission') ?? false) {
+        } else if (e.message.contains('permission') ?? false) {
           throw Exception(
             'Permission denied. Please check if the user is authenticated and has proper permissions. Error: ${e.message}',
           );
-        } else if (e.message?.contains('size') ?? false) {
+        } else if (e.message.contains('size') ?? false) {
           throw Exception(
             'File size exceeds limit. Please ensure files are under 5MB. Error: ${e.message}',
           );

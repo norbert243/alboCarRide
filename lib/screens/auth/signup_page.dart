@@ -171,10 +171,10 @@ class _SignupPageState extends State<SignupPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Country code dropdown
-                    Container(
+                    SizedBox(
                       width: 120,
                       child: DropdownButtonFormField<String>(
-                        value: _selectedCountryCode,
+                        initialValue: _selectedCountryCode,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),

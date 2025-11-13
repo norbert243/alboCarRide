@@ -7,8 +7,6 @@ import '../../services/ride_matching_service.dart';
 import '../../models/trip.dart';
 import '../../widgets/trip_card_widget.dart';
 import '../../widgets/offer_board.dart';
-import '../driver/verification_page.dart';
-import '../driver/waiting_for_review_page.dart';
 
 class EnhancedDriverHomePage extends StatefulWidget {
   const EnhancedDriverHomePage({super.key});

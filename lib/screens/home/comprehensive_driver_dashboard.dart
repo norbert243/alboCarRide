@@ -7,11 +7,8 @@ import 'package:albocarride/services/ride_matching_service.dart';
 import 'package:albocarride/services/driver_deposit_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/trip_card_widget.dart';
-import 'package:albocarride/widgets/offer_board.dart';
 import 'package:albocarride/widgets/available_rides_widget.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
-import '../driver/verification_page.dart';
-import '../driver/waiting_for_review_page.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 
@@ -254,7 +251,7 @@ class _ComprehensiveDriverDashboardState
 
   Future<void> _checkActiveTrip() async {
     try {
-      final activeTrip = await _tripService.getActiveTrip(_driverId!);;
+      final activeTrip = await _tripService.getActiveTrip(_driverId!);
       if (activeTrip != null) {
         final trip = Trip.fromMap(activeTrip);
         setState(() {
@@ -685,7 +682,7 @@ class _ComprehensiveDriverDashboardState
                 Colors.green,
               ),
               _buildMetricItem(
-                '${_averageRating.toStringAsFixed(1)}',
+                _averageRating.toStringAsFixed(1),
                 'Rating',
                 Icons.star,
                 Colors.amber,
@@ -822,7 +819,7 @@ class _ComprehensiveDriverDashboardState
               Switch(
                 value: _isOnline,
                 onChanged: _isLoading ? null : (value) => _toggleOnlineStatus(),
-                activeColor: Colors.green,
+                activeThumbColor: Colors.green,
               ),
             ],
           ),
