@@ -36,8 +36,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       print('🔐 AuthWrapper: Starting authentication check');
 
-      // Wait for Supabase auth state to be ready
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Wait longer for Supabase to fully initialize
+      await Future.delayed(const Duration(milliseconds: 1000));
       print('🔐 AuthWrapper: Supabase initialization delay completed');
 
       // WhatsApp-style: Attempt automatic login first
@@ -63,6 +63,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
           '🔐 AuthWrapper: ✅ User has valid session, skipping role selection',
         );
         await _routeBasedOnUserRole();
+        return;
+      }
+
+      // Check if we have local session data but Supabase session is invalid
+      final sessionData = await AuthService.getSessionData();
+      final hasLocalData = sessionData != null;
+      print('🔐 AuthWrapper: hasLocalSessionData = $hasLocalData');
+
+      if (hasLocalData) {
+        // User has local session data but Supabase session is invalid
+        // This happens when tokens expire - redirect to login
+        print(
+          '🔐 AuthWrapper: ⚠️ Local session data exists but Supabase session is invalid, redirecting to login',
+        );
+        _navigateToRoleSelection();
         return;
       }
 
@@ -122,6 +137,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await _routeBasedOnUserRole();
     } catch (e) {
       print('❌ Error in AuthWrapper routing: $e');
+      print('❌ Stack trace: ${e.toString()}');
       // Fallback to role selection on error
       _navigateToRoleSelection();
     } finally {

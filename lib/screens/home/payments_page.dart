@@ -59,7 +59,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 ? DateTime.parse(trip['end_time'] as String)
                 : DateTime.now();
             final pickupLocation = trip['pickup_location'] ?? 'Unknown pickup';
-            final dropoffLocation = trip['dropoff_location'] ?? 'Unknown destination';
+            final dropoffLocation =
+                trip['dropoff_location'] ?? 'Unknown destination';
 
             // Try to get payment method info
             String paymentMethod = 'Cash';
@@ -82,7 +83,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
             return {
               'id': trip['id'],
               'amount': fare,
-              'description': 'Ride from ${_shortenLocation(pickupLocation)} to ${_shortenLocation(dropoffLocation)}',
+              'description':
+                  'Ride from ${_shortenLocation(pickupLocation)} to ${_shortenLocation(dropoffLocation)}',
               'date': _formatDateTime(endTime),
               'status': trip['status'] ?? 'completed',
               'payment_method': paymentMethod,
@@ -331,22 +333,26 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             ],
                           ),
                         )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${_paymentHistory.length} Payments',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                      : RefreshIndicator(
+                          onRefresh: _loadPaymentData,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_paymentHistory.length} Payments',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 16),
-                              ..._paymentHistory.map(_buildPaymentCard),
-                            ],
+                                const SizedBox(height: 16),
+                                ..._paymentHistory.map(_buildPaymentCard),
+                              ],
+                            ),
                           ),
                         ),
 
