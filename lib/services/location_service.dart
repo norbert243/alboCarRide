@@ -2,13 +2,46 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../config/api_config.dart';
 
 class LocationService {
+  /// Get current location
+  static Future<Position?> getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print('Location services are disabled.');
+        return null;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          print('Location permissions are denied');
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        print('Location permissions are permanently denied');
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition();
+    } catch (e) {
+      print('Error getting current location: $e');
+      return null;
+    }
+  }
+
   /// Get place suggestions for autocomplete
   static Future<List<Map<String, dynamic>>> getPlaceSuggestions(
-    String query,
-  ) async {
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) async {
     if (query.isEmpty) return [];
 
     try {
