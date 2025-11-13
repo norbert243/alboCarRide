@@ -383,18 +383,30 @@ class _AuthWrapperState extends State<AuthWrapper> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // WhatsApp-style logo/icon
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.deepPurple,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.directions_car,
-                size: 40,
-                color: Colors.white,
+            // App logo
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/images/albo_logo.jpeg',
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  // Fallback to icon if image fails to load
+                  return Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.directions_car,
+                      size: 40,
+                      color: Colors.white,
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 24),
