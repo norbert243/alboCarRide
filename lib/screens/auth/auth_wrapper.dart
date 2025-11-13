@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
 import 'package:albocarride/screens/auth/signup_page.dart';
@@ -36,8 +37,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       print('🔐 AuthWrapper: Starting authentication check');
 
-      // Wait longer for Supabase to fully initialize
-      await Future.delayed(const Duration(milliseconds: 1000));
+      // Wait for Supabase auth state to be ready
+      await Future.delayed(const Duration(milliseconds: 500));
       print('🔐 AuthWrapper: Supabase initialization delay completed');
 
       // WhatsApp-style: Attempt automatic login first
@@ -66,19 +67,30 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      // Check if we have local session data but Supabase session is invalid
-      final sessionData = await AuthService.getSessionData();
-      final hasLocalData = sessionData != null;
-      print('🔐 AuthWrapper: hasLocalSessionData = $hasLocalData');
+      // Check SharedPreferences for basic session info
+      print('🔐 AuthWrapper: Checking SharedPreferences for basic session...');
+      final prefs = await SharedPreferences.getInstance();
+      final sharedUserId = prefs.getString('user_id');
+      final sharedRole = prefs.getString('user_role');
+      print(
+        '🔐 AuthWrapper: SharedPreferences - User ID: $sharedUserId, Role: $sharedRole',
+      );
 
-      if (hasLocalData) {
-        // User has local session data but Supabase session is invalid
-        // This happens when tokens expire - redirect to login
-        print(
-          '🔐 AuthWrapper: ⚠️ Local session data exists but Supabase session is invalid, redirecting to login',
-        );
-        _navigateToRoleSelection();
-        return;
+      if (sharedUserId != null && sharedRole != null) {
+        print('🔐 AuthWrapper: ✅ Found basic session in SharedPreferences');
+        // We have basic session info, try to restore Supabase session
+        final supabaseSession = _supabase.auth.currentSession;
+        if (supabaseSession != null) {
+          print('🔐 AuthWrapper: ✅ Supabase session exists, saving it');
+          await AuthService.saveSession(supabaseSession);
+          await _routeBasedOnUserRole();
+          return;
+        } else {
+          print('🔐 AuthWrapper: ⚠️ No Supabase session, using basic session');
+          // Use basic session info to route
+          await _routeBasedOnBasicSession(sharedUserId, sharedRole);
+          return;
+        }
       }
 
       // If no local session, check Supabase auth
@@ -120,7 +132,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
       final userPhone = user.phone ?? user.email ?? '';
       debugPrint('AuthWrapper: User role = $role, phone = $userPhone');
@@ -137,13 +149,54 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await _routeBasedOnUserRole();
     } catch (e) {
       print('❌ Error in AuthWrapper routing: $e');
-      print('❌ Stack trace: ${e.toString()}');
       // Fallback to role selection on error
       _navigateToRoleSelection();
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _routeBasedOnBasicSession(String userId, String role) async {
+    try {
+      print('🔐 Routing based on basic session:');
+      print('  User ID: $userId');
+      print('  Role: $role');
+
+      if (role == 'driver') {
+        // For drivers, we need to check their verification status
+        final profileResponse = await _supabase
+            .from('profiles')
+            .select('verification_status, is_verified')
+            .eq('id', userId)
+            .single()
+            .catchError((e) {
+              print('❌ Error fetching driver profile: $e');
+              return null;
+            });
+
+        final verificationStatus =
+            profileResponse['verification_status'] as String?;
+        final isVerified = profileResponse['is_verified'] as bool? ?? false;
+
+        print('  Verification Status: $verificationStatus');
+        print('  Is Verified: $isVerified');
+
+        if (verificationStatus == 'approved' && isVerified) {
+          _navigateToEnhancedDriverHome();
+        } else if (verificationStatus == 'pending') {
+          _navigateToWaitingReview();
+        } else {
+          _navigateToVerification();
+        }
+            } else {
+        // Customer - go to customer home
+        _navigateToCustomerHome();
+      }
+    } catch (e) {
+      print('❌ Error in basic session routing: $e');
+      _navigateToRoleSelection();
     }
   }
 
@@ -170,7 +223,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return;
       }
 
-      final profile = profileResponse.first as Map<String, dynamic>;
+      final profile = profileResponse.first;
       final role = profile['role'] as String? ?? 'customer';
 
       debugPrint('User authenticated successfully:');

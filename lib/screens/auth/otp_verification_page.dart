@@ -107,7 +107,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       if (response.statusCode == 200 && responseData['success'] == true) {
         final userId = responseData['userId'];
         final isNewUser = responseData['isNewUser'] ?? false;
-        final role = responseData['role'];
+        final userRole = responseData['role'] ?? widget.role;
         final email = responseData['email'];
         final password = responseData['password'];
 
@@ -123,17 +123,17 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
                 authResponse.session!,
                 userId,
                 widget.phoneNumber,
-                role,
+                userRole,
               );
             }
           } catch (signInError) {
             print('Sign in error: $signInError');
             // Fallback: save basic session info without tokens
-            await _saveBasicSessionInfo(userId, widget.phoneNumber, role);
+            await _saveBasicSessionInfo(userId, widget.phoneNumber, userRole);
           }
         } else {
           // Fallback: save basic session info without tokens
-          await _saveBasicSessionInfo(userId, widget.phoneNumber, role);
+          await _saveBasicSessionInfo(userId, widget.phoneNumber, userRole);
         }
 
         if (mounted) {
@@ -143,7 +143,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
           );
 
           await Future.delayed(const Duration(milliseconds: 500));
-          await _navigateBasedOnUserStatus(role, userId, isNewUser);
+          await _navigateBasedOnUserStatus(userRole, userId, isNewUser);
         }
       } else {
         final errorMessage =

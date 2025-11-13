@@ -75,9 +75,6 @@ dependencies:
   # Google Maps integration
   google_maps_flutter: ^2.5.0
 
-  # Google Maps Flutter for map display
-  google_maps_flutter: ^2.5.0
-
   # URL launcher for opening links, phone calls, emails
   url_launcher: ^6.1.10
 

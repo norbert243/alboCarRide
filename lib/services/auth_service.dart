@@ -395,6 +395,24 @@ class AuthService {
     return _instance._isAuthenticated;
   }
 
+  static Future<Map<String, String?>?> getSessionData() async {
+    try {
+      final accessToken = await _instance._storage.read(key: _kAccessTokenKey);
+      final refreshToken = await _instance._storage.read(key: _kRefreshTokenKey);
+      
+      if (accessToken != null || refreshToken != null) {
+        return {
+          'accessToken': accessToken,
+          'refreshToken': refreshToken,
+        };
+      }
+      return null;
+    } catch (e) {
+      print('Error getting session data: $e');
+      return null;
+    }
+  }
+
   static Future<void> saveSession(Session session) async {
     await _instance.handleSuccessfulAuth(session);
   }
