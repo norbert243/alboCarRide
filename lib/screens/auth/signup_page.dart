@@ -49,9 +49,17 @@ class _SignupPageState extends State<SignupPage> {
       final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
       final fullName = _fullNameController.text;
 
+      print('🔵 SIGNUP: Starting sign-up process');
+      print('🔵 SIGNUP: Phone number: $phoneNumber');
+      print('🔵 SIGNUP: Full name: $fullName');
+      print('🔵 SIGNUP: Role: ${widget.role}');
+
       // Call Supabase Edge Function to send OTP
       final supabaseUrl = dotenv.env['SUPABASE_URL'];
       final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+      print('🔵 SIGNUP: Supabase URL: $supabaseUrl');
+      print('🔵 SIGNUP: Calling send-otp function...');
 
       final response = await http.post(
         Uri.parse('$supabaseUrl/functions/v1/send-otp'),
@@ -64,7 +72,11 @@ class _SignupPageState extends State<SignupPage> {
         }),
       );
 
+      print('🔵 SIGNUP: Response status code: ${response.statusCode}');
+      print('🔵 SIGNUP: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
+        print('✅ SIGNUP: OTP sent successfully!');
         if (mounted) {
           CustomToast.showSuccess(
             context: context,

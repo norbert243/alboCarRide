@@ -99,7 +99,7 @@ serve(async (req) => {
       .single()
 
     // Also check if auth user exists
-    const email = `${phoneNumber}@albocarride.com`
+    let email = `${phoneNumber}@albocarride.com`
     const { data: authUsers } = await supabaseClient.auth.admin.listUsers()
     const existingAuthUser = authUsers?.users?.find(u => u.email === email)
 
