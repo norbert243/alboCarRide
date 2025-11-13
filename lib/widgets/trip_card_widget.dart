@@ -402,12 +402,11 @@ class _TripCardWidgetState extends State<TripCardWidget> {
                 _formatDateTime(trip.startTime!.toIso8601String()),
               ),
 
-            if (trip.createdAt != null)
-              _buildInfoRow(
-                Icons.schedule,
-                'Requested:',
-                _formatDateTime(trip.createdAt.toIso8601String()),
-              ),
+            _buildInfoRow(
+              Icons.schedule,
+              'Requested:',
+              _formatDateTime(trip.createdAt.toIso8601String()),
+            ),
 
             if (trip.cancellationReason != null)
               _buildInfoRow(

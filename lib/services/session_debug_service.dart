@@ -193,25 +193,25 @@ class SessionDebugService {
 
     // Recommendations
     report.writeln('RECOMMENDATIONS:');
-    if (!validity['sessions_synced'] as bool) {
+    if (!validity['sessions_synced']) {
       report.writeln('  ⚠️  Sessions are not synchronized');
       report.writeln('  💡 Run forceSessionSync() to synchronize sessions');
     }
 
-    if (!validity['local_session_valid'] as bool &&
+    if (!validity['local_session_valid'] &&
         validity['supabase_session_valid'] as bool) {
       report.writeln('  ⚠️  Local session invalid but Supabase session valid');
       report.writeln('  💡 Run forceSessionSync() to restore local session');
     }
 
     if (validity['local_session_valid'] as bool &&
-        !validity['supabase_session_valid'] as bool) {
+        !validity['supabase_session_valid']) {
       report.writeln('  ⚠️  Local session valid but Supabase session invalid');
       report.writeln('  💡 User needs to re-authenticate');
     }
 
-    if (!validity['local_session_valid'] as bool &&
-        !validity['supabase_session_valid'] as bool) {
+    if (!validity['local_session_valid'] &&
+        !validity['supabase_session_valid']) {
       report.writeln('  ✅ No valid sessions - user needs to log in');
     }
 

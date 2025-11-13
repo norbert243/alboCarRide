@@ -16,6 +16,8 @@ void main() async {
 }
 
 class DocumentUploadTestApp extends StatelessWidget {
+  const DocumentUploadTestApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(home: DocumentUploadTestPage());
@@ -23,6 +25,8 @@ class DocumentUploadTestApp extends StatelessWidget {
 }
 
 class DocumentUploadTestPage extends StatefulWidget {
+  const DocumentUploadTestPage({super.key});
+
   @override
   _DocumentUploadTestPageState createState() => _DocumentUploadTestPageState();
 }

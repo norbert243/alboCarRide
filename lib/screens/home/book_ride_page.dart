@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/services/location_service.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/widgets/ride_map_widget.dart';
 
 class BookRidePage extends StatefulWidget {
   const BookRidePage({super.key});
@@ -16,23 +18,44 @@ class _BookRidePageState extends State<BookRidePage> {
   final _pickupController = TextEditingController();
   final _dropoffController = TextEditingController();
   final _notesController = TextEditingController();
+  final _suggestedPriceController = TextEditingController();
 
   bool _isLoading = false;
   bool _isCalculatingFare = false;
   String? _customerId;
   double? _estimatedFare;
+  bool _showPriceNegotiation = false;
   List<Map<String, dynamic>> _pickupSuggestions = [];
   List<Map<String, dynamic>> _dropoffSuggestions = [];
-  FocusNode _pickupFocusNode = FocusNode();
-  FocusNode _dropoffFocusNode = FocusNode();
+  final FocusNode _pickupFocusNode = FocusNode();
+  final FocusNode _dropoffFocusNode = FocusNode();
   bool _showPickupSuggestions = false;
   bool _showDropoffSuggestions = false;
+  double? _userLatitude;
+  double? _userLongitude;
+  double? _pickupLatitude;
+  double? _pickupLongitude;
+  double? _dropoffLatitude;
+  double? _dropoffLongitude;
+  List<LatLng> _routePolyline = [];
 
   @override
   void initState() {
     super.initState();
     _loadCustomerId();
     _setupFocusListeners();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    final position = await LocationService.getCurrentLocation();
+    if (position != null) {
+      setState(() {
+        _userLatitude = position.latitude;
+        _userLongitude = position.longitude;
+      });
+      print('📍 User location set: $_userLatitude, $_userLongitude');
+    }
   }
 
   @override
@@ -40,6 +63,7 @@ class _BookRidePageState extends State<BookRidePage> {
     _pickupController.dispose();
     _dropoffController.dispose();
     _notesController.dispose();
+    _suggestedPriceController.dispose();
     _pickupFocusNode.dispose();
     _dropoffFocusNode.dispose();
     super.dispose();
@@ -69,7 +93,11 @@ class _BookRidePageState extends State<BookRidePage> {
 
   Future<void> _onPickupChanged(String value) async {
     if (value.length > 2) {
-      final suggestions = await LocationService.getPlaceSuggestions(value);
+      final suggestions = await LocationService.getPlaceSuggestions(
+        value,
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+      );
       setState(() {
         _pickupSuggestions = suggestions;
         _showPickupSuggestions = true;
@@ -85,7 +113,11 @@ class _BookRidePageState extends State<BookRidePage> {
 
   Future<void> _onDropoffChanged(String value) async {
     if (value.length > 2) {
-      final suggestions = await LocationService.getPlaceSuggestions(value);
+      final suggestions = await LocationService.getPlaceSuggestions(
+        value,
+        latitude: _userLatitude,
+        longitude: _userLongitude,
+      );
       setState(() {
         _dropoffSuggestions = suggestions;
         _showDropoffSuggestions = true;
@@ -99,19 +131,43 @@ class _BookRidePageState extends State<BookRidePage> {
     _calculateFare();
   }
 
-  void _selectPickupSuggestion(Map<String, dynamic> suggestion) {
+  void _selectPickupSuggestion(Map<String, dynamic> suggestion) async {
     _pickupController.text = suggestion['description'];
     setState(() {
       _showPickupSuggestions = false;
     });
+
+    // Get coordinates for the selected pickup location
+    final pickupDetails = await LocationService.geocodeAddress(
+      suggestion['description'],
+    );
+    if (pickupDetails != null) {
+      setState(() {
+        _pickupLatitude = pickupDetails['latitude'] as double?;
+        _pickupLongitude = pickupDetails['longitude'] as double?;
+      });
+    }
+
     _calculateFare();
   }
 
-  void _selectDropoffSuggestion(Map<String, dynamic> suggestion) {
+  void _selectDropoffSuggestion(Map<String, dynamic> suggestion) async {
     _dropoffController.text = suggestion['description'];
     setState(() {
       _showDropoffSuggestions = false;
     });
+
+    // Get coordinates for the selected dropoff location
+    final dropoffDetails = await LocationService.geocodeAddress(
+      suggestion['description'],
+    );
+    if (dropoffDetails != null) {
+      setState(() {
+        _dropoffLatitude = dropoffDetails['latitude'] as double?;
+        _dropoffLongitude = dropoffDetails['longitude'] as double?;
+      });
+    }
+
     _calculateFare();
   }
 
@@ -146,7 +202,7 @@ class _BookRidePageState extends State<BookRidePage> {
       final dropoffLat = dropoffDetails['latitude'] as double;
       final dropoffLng = dropoffDetails['longitude'] as double;
 
-      // Calculate fare
+      // Calculate fare and get route polyline
       final fare = await LocationService.estimateFare(
         pickupLat,
         pickupLng,
@@ -154,15 +210,34 @@ class _BookRidePageState extends State<BookRidePage> {
         dropoffLng,
       );
 
+      // Get route polyline for map display
+      final polyline = await LocationService.getRoutePolyline(
+        pickupLat,
+        pickupLng,
+        dropoffLat,
+        dropoffLng,
+      );
+
       setState(() {
+        _pickupLatitude = pickupLat;
+        _pickupLongitude = pickupLng;
+        _dropoffLatitude = dropoffLat;
+        _dropoffLongitude = dropoffLng;
+        _routePolyline = polyline;
         _estimatedFare = fare;
         _isCalculatingFare = false;
+        _showPriceNegotiation = fare != null;
+        // Set suggested price to estimated fare by default
+        if (fare != null) {
+          _suggestedPriceController.text = fare.toStringAsFixed(2);
+        }
       });
     } catch (e) {
       print('Error calculating fare: $e');
       setState(() {
         _estimatedFare = null;
         _isCalculatingFare = false;
+        _showPriceNegotiation = false;
       });
     }
   }
@@ -181,18 +256,54 @@ class _BookRidePageState extends State<BookRidePage> {
         return;
       }
 
+      // Get suggested price or use estimated fare
+      final suggestedPrice = _suggestedPriceController.text.isNotEmpty
+          ? double.tryParse(_suggestedPriceController.text)
+          : _estimatedFare;
+
+      // Get coordinates for pickup location
+      final pickupDetails = await LocationService.geocodeAddress(
+        _pickupController.text,
+      );
+      if (pickupDetails == null) {
+        CustomToast.showError(
+          context: context,
+          message: 'Could not find pickup location details',
+        );
+        return;
+      }
+
+      // Get coordinates for dropoff location
+      final dropoffDetails = await LocationService.geocodeAddress(
+        _dropoffController.text,
+      );
+      if (dropoffDetails == null) {
+        CustomToast.showError(
+          context: context,
+          message: 'Could not find dropoff location details',
+        );
+        return;
+      }
+
+      final pickupLat = pickupDetails['latitude'] as double;
+      final pickupLng = pickupDetails['longitude'] as double;
+      final dropoffLat = dropoffDetails['latitude'] as double;
+      final dropoffLng = dropoffDetails['longitude'] as double;
+
       // Create ride request in database
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
-            'customer_id': _customerId,
-            'pickup_location': _pickupController.text,
-            'dropoff_location': _dropoffController.text,
-            'notes': _notesController.text.isNotEmpty
-                ? _notesController.text
-                : null,
-            'status': 'pending',
-            'created_at': DateTime.now().toIso8601String(),
-          }).select();
+        'customer_id': _customerId,
+        'pickup_address': _pickupController.text,
+        'pickup_latitude': pickupLat,
+        'pickup_longitude': pickupLng,
+        'dropoff_address': _dropoffController.text,
+        'dropoff_latitude': dropoffLat,
+        'dropoff_longitude': dropoffLng,
+        'estimated_price': _estimatedFare,
+        'status': 'pending',
+        'request_time': DateTime.now().toIso8601String(),
+      }).select();
 
       if (response.isNotEmpty) {
         CustomToast.showSuccess(
@@ -241,6 +352,27 @@ class _BookRidePageState extends State<BookRidePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Map Widget
+              if (_pickupLatitude != null || _userLatitude != null)
+                Column(
+                  children: [
+                    RideMapWidget(
+                      currentLat: _userLatitude,
+                      currentLng: _userLongitude,
+                      pickupLat: _pickupLatitude,
+                      pickupLng: _pickupLongitude,
+                      dropoffLat: _dropoffLatitude,
+                      dropoffLng: _dropoffLongitude,
+                      pickupAddress: _pickupController.text,
+                      dropoffAddress: _dropoffController.text,
+                      polylinePoints: _routePolyline,
+                      height: 250,
+                      showCurrentLocation: true,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+
               // Header
               const Text(
                 'Where would you like to go?',
@@ -422,6 +554,110 @@ class _BookRidePageState extends State<BookRidePage> {
                   ],
                 ),
               ),
+
+              // Price Negotiation Section
+              if (_showPriceNegotiation) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withAlpha(26),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withAlpha(51)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.payments_outlined,
+                            color: Colors.green[700],
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Suggest Your Price',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'You can adjust the price around the estimated fare. Minimum price is \$3.00',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _suggestedPriceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Your Suggested Price',
+                          labelStyle: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                          hintText: '0.00',
+                          prefixText: '\$ ',
+                          prefixStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.green[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.green[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.green[600]!,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 16,
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a price';
+                          }
+                          final price = double.tryParse(value);
+                          if (price == null) {
+                            return 'Please enter a valid price';
+                          }
+                          if (price < 3.0) {
+                            return 'Minimum price is \$3.00';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

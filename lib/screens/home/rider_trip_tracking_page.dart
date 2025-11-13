@@ -7,8 +7,7 @@ import 'package:albocarride/widgets/custom_toast.dart';
 class RiderTripTrackingPage extends StatefulWidget {
   final String tripId;
 
-  const RiderTripTrackingPage({Key? key, required this.tripId})
-    : super(key: key);
+  const RiderTripTrackingPage({super.key, required this.tripId});
 
   @override
   State<RiderTripTrackingPage> createState() => _RiderTripTrackingPageState();

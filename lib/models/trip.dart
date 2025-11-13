@@ -1,4 +1,3 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Represents a trip created when a driver accepts a ride offer
 class Trip {

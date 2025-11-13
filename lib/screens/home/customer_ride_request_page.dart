@@ -373,7 +373,7 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
                     },
                   ),
                 )
-                .toList(),
+                ,
           ],
         ),
       ),

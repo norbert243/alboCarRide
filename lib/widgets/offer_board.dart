@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../services/ride_matching_service.dart';
 import '../services/session_service.dart';
@@ -23,7 +22,7 @@ class _OfferBoardState extends State<OfferBoard> {
   bool _isLoading = false;
   double? _driverLat;
   double? _driverLng;
-  Map<String, List<LatLng>> _routePolylines = {}; // Cache for polylines
+  final Map<String, List<LatLng>> _routePolylines = {}; // Cache for polylines
 
   @override
   void initState() {
