@@ -181,17 +181,45 @@ class _BookRidePageState extends State<BookRidePage> {
         return;
       }
 
+      // Get coordinates for pickup and dropoff locations
+      final pickupDetails = await LocationService.geocodeAddress(
+        _pickupController.text,
+      );
+      final dropoffDetails = await LocationService.geocodeAddress(
+        _dropoffController.text,
+      );
+
+      if (pickupDetails == null || dropoffDetails == null) {
+        CustomToast.showError(
+          context: context,
+          message: 'Could not find location details. Please try again.',
+        );
+        return;
+      }
+
+      final pickupLat = pickupDetails['latitude'] as double;
+      final pickupLng = pickupDetails['longitude'] as double;
+      final dropoffLat = dropoffDetails['latitude'] as double;
+      final dropoffLng = dropoffDetails['longitude'] as double;
+
+      // Use estimated fare or default minimum price
+      final proposedPrice = _estimatedFare ?? 3.0;
+
       // Create ride request in database
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
             'rider_id': _customerId,
-            'pickup_location': _pickupController.text,
-            'dropoff_location': _dropoffController.text,
+            'pickup_address': _pickupController.text,
+            'dropoff_address': _dropoffController.text,
+            'pickup_lat': pickupLat,
+            'pickup_lng': pickupLng,
+            'dropoff_lat': dropoffLat,
+            'dropoff_lng': dropoffLng,
+            'proposed_price': proposedPrice,
             'notes': _notesController.text.isNotEmpty
                 ? _notesController.text
                 : null,
             'status': 'pending',
-            'created_at': DateTime.now().toIso8601String(),
           }).select();
 
       if (response.isNotEmpty) {
