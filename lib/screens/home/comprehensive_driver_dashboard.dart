@@ -11,6 +11,9 @@ import 'package:albocarride/widgets/available_rides_widget.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
+import 'package:albocarride/screens/driver/driver_mobile_money_setup_page.dart';
+import 'package:albocarride/screens/driver/wallet_commission_page.dart';
+import 'package:albocarride/screens/emergency/emergency_contacts_page.dart';
 
 class ComprehensiveDriverDashboard extends StatefulWidget {
   const ComprehensiveDriverDashboard({super.key});
@@ -358,9 +361,10 @@ class _ComprehensiveDriverDashboardState
     await SessionService.clearSessionStatic();
 
     if (mounted) {
+      // Return to demo mode page
       Navigator.pushNamedAndRemoveUntil(
         context,
-        '/role-selection',
+        '/',
         (route) => false,
       );
     }
@@ -923,11 +927,48 @@ class _ComprehensiveDriverDashboardState
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false, // Remove back button
         title: const Text('Driver Dashboard'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.emergency),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const EmergencyContactsPage(),
+                ),
+              );
+            },
+            tooltip: 'SOS Contacts',
+          ),
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DriverMobileMoneySetupPage(),
+                ),
+              );
+            },
+            tooltip: 'Mobile Money',
+          ),
+          IconButton(
+            icon: const Icon(Icons.payment),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const WalletCommissionPage(),
+                ),
+              );
+            },
+            tooltip: 'Wallet & Commission',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _signOut,

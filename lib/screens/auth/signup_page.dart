@@ -49,7 +49,7 @@ class _SignupPageState extends State<SignupPage> {
       final phoneNumber = '$_selectedCountryCode${_phoneController.text}';
       final fullName = _fullNameController.text;
 
-      // Call Supabase Edge Function to send OTP
+      // Call Supabase Edge Function to send OTP via Twilio
       final supabaseUrl = dotenv.env['SUPABASE_URL'];
       final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
 

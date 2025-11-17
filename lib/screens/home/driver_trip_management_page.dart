@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/widgets/sos_button.dart';
 
 class DriverTripManagementPage extends StatefulWidget {
   final String tripId;
@@ -358,6 +359,12 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
                 _buildActionButtons(),
               ],
             ),
+      floatingActionButton: _currentTrip != null
+          ? SosButton(
+              userRole: 'driver',
+              tripId: widget.tripId,
+            )
+          : null,
     );
   }
 }

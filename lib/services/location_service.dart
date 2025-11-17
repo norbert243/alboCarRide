@@ -227,6 +227,61 @@ class LocationService {
     return null;
   }
 
+  /// Reverse geocode coordinates to get address
+  static Future<String?> reverseGeocode(
+    double latitude,
+    double longitude,
+  ) async {
+    try {
+      final apiKey = ApiConfig.googleMapsApiKey;
+      final url =
+          '${ApiConfig.geocodingEndpoint}?latlng=$latitude,$longitude&key=$apiKey';
+
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final results = data['results'] as List?;
+
+        if (results != null && results.isNotEmpty) {
+          return results.first['formatted_address'] as String?;
+        }
+      }
+    } catch (e) {
+      print('Error reverse geocoding: $e');
+    }
+
+    return null;
+  }
+
+  /// Search places - wrapper for getPlaceSuggestions with details
+  static Future<List<Map<String, dynamic>>> searchPlaces(String query) async {
+    try {
+      final suggestions = await getPlaceSuggestions(query);
+      List<Map<String, dynamic>> results = [];
+
+      for (var suggestion in suggestions) {
+        final placeId = suggestion['placeId'];
+        if (placeId != null) {
+          final details = await getPlaceDetails(placeId);
+          if (details != null) {
+            results.add({
+              'name': suggestion['mainText'] ?? '',
+              'address': details['address'] ?? suggestion['description'] ?? '',
+              'latitude': details['latitude'],
+              'longitude': details['longitude'],
+            });
+          }
+        }
+      }
+
+      return results;
+    } catch (e) {
+      print('Error searching places: $e');
+      return [];
+    }
+  }
+
   /// Estimate fare based on distance and time
   static Future<double?> estimateFare(
     double originLat,

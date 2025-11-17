@@ -294,15 +294,14 @@ class _BookRidePageState extends State<BookRidePage> {
       final response =
           await Supabase.instance.client.from('ride_requests').insert({
         'customer_id': _customerId,
-        'pickup_address': _pickupController.text,
+        'pickup_location': _pickupController.text,
         'pickup_latitude': pickupLat,
         'pickup_longitude': pickupLng,
-        'dropoff_address': _dropoffController.text,
+        'dropoff_location': _dropoffController.text,
         'dropoff_latitude': dropoffLat,
         'dropoff_longitude': dropoffLng,
-        'estimated_price': _estimatedFare,
+        'suggested_price': _estimatedFare,
         'status': 'pending',
-        'request_time': DateTime.now().toIso8601String(),
       }).select();
 
       if (response.isNotEmpty) {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/services/auth_service.dart';
-import 'package:albocarride/services/session_service.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:albocarride/screens/home/indrive_book_ride_complete.dart';
 
+/// Bolt-style customer home screen
+/// Full-screen map with floating menu and "Where to?" search card
 class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
 
@@ -11,340 +13,234 @@ class CustomerHomePage extends StatefulWidget {
 }
 
 class _CustomerHomePageState extends State<CustomerHomePage> {
-  List<Map<String, dynamic>> _recentTrips = [];
-  bool _isLoading = true;
+  GoogleMapController? _mapController;
+  Position? _currentPosition;
+  LatLng? _centerPosition;
+  bool _isLoadingLocation = true;
+
+  // Mock nearby drivers (you can load real drivers from database)
+  final Set<Marker> _driverMarkers = {};
 
   @override
   void initState() {
     super.initState();
-    _loadRecentTrips();
+    _getCurrentLocation();
   }
 
-  Future<void> _loadRecentTrips() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
 
+  Future<void> _getCurrentLocation() async {
     try {
-      final customerId = await SessionService.getUserIdStatic();
-      if (customerId != null) {
-        final response = await Supabase.instance.client
-            .from('trips')
-            .select('id, dropoff_location, status, final_price')
-            .eq('customer_id', customerId)
-            .order('created_at', ascending: false)
-            .limit(3);
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
 
+      if (mounted) {
         setState(() {
-          _recentTrips = List<Map<String, dynamic>>.from(response);
+          _currentPosition = position;
+          _centerPosition = LatLng(position.latitude, position.longitude);
+          _isLoadingLocation = false;
         });
+
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            LatLng(position.latitude, position.longitude),
+            15,
+          ),
+        );
+
+        // Generate mock nearby drivers
+        _generateMockDrivers(position.latitude, position.longitude);
       }
     } catch (e) {
-      print('Error loading recent trips: $e');
-    } finally {
+      print('Error getting location: $e');
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _centerPosition = const LatLng(-4.3217, 15.3125); // Kinshasa default
+          _isLoadingLocation = false;
+        });
       }
     }
   }
 
-  Future<void> _signOut(BuildContext context) async {
-    await AuthService.clearSession();
-    await Supabase.instance.client.auth.signOut();
+  void _generateMockDrivers(double centerLat, double centerLng) {
+    // Generate 5-10 mock drivers scattered around user
+    final random = DateTime.now().millisecondsSinceEpoch;
+    final markers = <Marker>{};
 
-    final navigatorContext = context;
-    if (navigatorContext.mounted) {
-      Navigator.pushNamedAndRemoveUntil(
-        navigatorContext,
-        '/role-selection',
-        (route) => false,
+    for (int i = 0; i < 7; i++) {
+      final latOffset = ((random + i * 13) % 100 - 50) / 10000.0;
+      final lngOffset = ((random + i * 17) % 100 - 50) / 10000.0;
+
+      markers.add(
+        Marker(
+          markerId: MarkerId('driver_$i'),
+          position: LatLng(centerLat + latOffset, centerLng + lngOffset),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+          flat: true,
+          rotation: (random + i * 45) % 360.0,
+        ),
       );
     }
+
+    setState(() {
+      _driverMarkers.addAll(markers);
+    });
+  }
+
+  void _openMenu() {
+    // Open drawer or navigate to menu
+    // For now, just show a simple drawer
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to profile
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to settings
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline),
+              title: const Text('Help'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/support');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openBookRide() {
+    // Navigate to inDriver-style booking flow and show search immediately
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const InDriverBookRideComplete(
+          showSearchImmediately: true,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Customer Dashboard',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black87),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 1,
-        foregroundColor: Colors.black87,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _signOut(context),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome Section
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.blue, Colors.lightBlue],
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Welcome back!',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Ready to book your next ride?',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white.withAlpha(229), // 0.9 opacity
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Quick Actions
-            const Text(
-              'Quick Actions',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 16),
-            GridView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.2,
-              ),
-              children: [
-                _buildActionCard(
-                  icon: Icons.directions_car,
-                  title: 'Book Ride',
-                  color: Colors.green,
-                  onTap: () => Navigator.pushNamed(context, '/book-ride'),
-                ),
-                _buildActionCard(
-                  icon: Icons.pending_actions,
-                  title: 'My Requests',
-                  color: Colors.blue,
-                  onTap: () => Navigator.pushNamed(context, '/my-ride-requests'),
-                ),
-                _buildActionCard(
-                  icon: Icons.history,
-                  title: 'Ride History',
-                  color: Colors.orange,
-                  onTap: () => Navigator.pushNamed(context, '/ride-history'),
-                ),
-                _buildActionCard(
-                  icon: Icons.payment,
-                  title: 'Payment',
-                  color: Colors.purple,
-                  onTap: () => Navigator.pushNamed(context, '/payments'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Recent Activity
-            const Text(
-              'Recent Activity',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _recentTrips.isEmpty
-                    ? _buildNoActivity()
-                    : Column(
-                        children: _recentTrips.map((trip) {
-                          final status = trip['status'] ?? 'Unknown';
-                          final color = status == 'completed'
-                              ? Colors.green
-                              : status == 'cancelled'
-                                  ? Colors.red
-                                  : Colors.orange;
-                          final icon = status == 'completed'
-                              ? Icons.check_circle
-                              : status == 'cancelled'
-                                  ? Icons.cancel
-                                  : Icons.hourglass_empty;
-
-                          return _buildActivityItem(
-                            'Ride to ${trip['dropoff_location'] ?? 'Unknown'}',
-                            '$status • \$${(trip['final_price'] ?? 0).toStringAsFixed(2)}',
-                            icon,
-                            color,
-                          );
-                        }).toList(),
-                      ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionCard({
-    required IconData icon,
-    required String title,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      borderRadius: BorderRadius.circular(12),
-      color: Colors.white,
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(26), // 0.1 opacity
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 24, color: color),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoActivity() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Center(
-        child: Column(
-          children: [
-            Icon(
-              Icons.history_toggle_off_outlined,
-              size: 48,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              'No Recent Activity',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Your recent rides will appear here.',
-              style: TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActivityItem(
-    String title,
-    String subtitle,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(13), // 0.05 opacity
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
+      body: Stack(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withAlpha(26), // 0.1 opacity
-              shape: BoxShape.circle,
+          // 1. FULL-SCREEN MAP (Primary element)
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _centerPosition ?? const LatLng(-4.3217, 15.3125),
+              zoom: 15,
             ),
-            child: Icon(icon, size: 20, color: color),
+            onMapCreated: (controller) {
+              _mapController = controller;
+            },
+            markers: _driverMarkers,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            compassEnabled: false,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
+
+          // Loading indicator
+          if (_isLoadingLocation)
+            const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF2196F3),
+              ),
+            ),
+
+          // 2. FLOATING MENU BUTTON (Top-left overlay)
+          SafeArea(
+            child: Positioned(
+              top: 16,
+              left: 16,
+              child: FloatingActionButton(
+                onPressed: _openMenu,
+                backgroundColor: Colors.white,
+                elevation: 6,
+                child: const Icon(
+                  Icons.menu,
+                  color: Color(0xFF424242),
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+
+          // 3. BOTTOM SEARCH CARD (Above bottom nav)
+          Positioned(
+            bottom: 72, // 60dp nav bar + 12dp spacing
+            left: 16,
+            right: 16,
+            child: GestureDetector(
+              onTap: _openBookRide,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 20,
+                  horizontal: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                    bottom: Radius.circular(24),
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.search,
+                      size: 24,
+                      color: Color(0xFF757575),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Where to?',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ],
