@@ -120,7 +120,7 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     setState(() => _isLoading = true);
     try {
       await _requestService.createRequest(
-        riderId: _riderId!,
+        customerId: _riderId!,
         pickupAddress: _pickupController.text,
         dropoffAddress: _dropoffController.text,
         proposedPrice: price,
@@ -330,10 +330,10 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
             ..._activeRequests
                 .map(
                   (request) => ListTile(
-                    title: Text(request['pickup_address'] ?? ''),
-                    subtitle: Text(request['dropoff_address'] ?? ''),
+                    title: Text(request['pickup_location'] ?? ''),
+                    subtitle: Text(request['dropoff_location'] ?? ''),
                     trailing: Text(
-                      '\$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
+                      '\$${request['suggested_price']?.toStringAsFixed(2) ?? '0.00'}',
                     ),
                     leading: const Icon(Icons.directions_car),
                     onTap: () {
@@ -346,10 +346,10 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('From: ${request['pickup_address']}'),
-                              Text('To: ${request['dropoff_address']}'),
+                              Text('From: ${request['pickup_location']}'),
+                              Text('To: ${request['dropoff_location']}'),
                               Text(
-                                'Price: \$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
+                                'Price: \$${request['suggested_price']?.toStringAsFixed(2) ?? '0.00'}',
                               ),
                               if (request['notes'] != null)
                                 Text('Notes: ${request['notes']}'),
