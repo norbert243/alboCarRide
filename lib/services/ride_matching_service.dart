@@ -64,21 +64,31 @@ class RideMatchingService {
     final proposedPrice = (request['proposed_price'] as num).toDouble();
     final pickupAddress = request['pickup_address'] as String;
     final dropoffAddress = request['dropoff_address'] as String;
+    final pickupLat = request['pickup_lat'] as double?;
+    final pickupLng = request['pickup_lng'] as double?;
 
     try {
-      // Get rider's pickup location coordinates
-      final pickupLocation = await LocationService.geocodeAddress(
-        pickupAddress,
-      );
-      if (pickupLocation == null) {
-        throw Exception('Could not geocode pickup address');
+      // Use coordinates from the request if available, otherwise geocode
+      double finalPickupLat;
+      double finalPickupLng;
+      
+      if (pickupLat != null && pickupLng != null) {
+        finalPickupLat = pickupLat;
+        finalPickupLng = pickupLng;
+      } else {
+        // Get rider's pickup location coordinates
+        final pickupLocation = await LocationService.geocodeAddress(
+          pickupAddress,
+        );
+        if (pickupLocation == null) {
+          throw Exception('Could not geocode pickup address');
+        }
+        finalPickupLat = pickupLocation['latitude'] as double;
+        finalPickupLng = pickupLocation['longitude'] as double;
       }
 
-      final pickupLat = pickupLocation['latitude'] as double;
-      final pickupLng = pickupLocation['longitude'] as double;
-
       // Find nearby online drivers
-      final nearbyDrivers = await _findNearbyDrivers(pickupLat, pickupLng);
+      final nearbyDrivers = await _findNearbyDrivers(finalPickupLat, finalPickupLng);
 
       if (nearbyDrivers.isEmpty) {
         print('No nearby drivers found for request $requestId');

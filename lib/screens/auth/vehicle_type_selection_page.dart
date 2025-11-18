@@ -43,8 +43,8 @@ class _VehicleTypeSelectionPageState extends State<VehicleTypeSelectionPage> {
         message: 'Vehicle type saved successfully!',
       );
 
-      // Navigate to AuthWrapper to determine next step
-      Navigator.pushNamed(context, '/auth_wrapper');
+      // Navigate directly to verification page for document upload
+      Navigator.pushNamed(context, '/verification');
     } catch (e) {
       CustomToast.showError(
         context: context,

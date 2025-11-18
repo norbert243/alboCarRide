@@ -240,36 +240,34 @@ class PaymentService {
           .eq('rider_id', customerId)
           .order('created_at', ascending: false);
 
-      if (response != null) {
-        final List<Map<String, dynamic>> payments = [];
+      final List<Map<String, dynamic>> payments = [];
 
-        for (final payment in response) {
-          final trip = payment['trip'] as Map<String, dynamic>?;
-          final request = payment['request'] as Map<String, dynamic>?;
-          final rideRequest = request?['ride_request'] as Map<String, dynamic>?;
+      for (final payment in response) {
+        final trip = payment['trip'] as Map<String, dynamic>?;
+        final request = payment['request'] as Map<String, dynamic>?;
+        final rideRequest = request?['ride_request'] as Map<String, dynamic>?;
 
-          String description = 'Payment';
-          if (rideRequest != null) {
-            final pickup = rideRequest['pickup_address'] ?? 'Unknown pickup';
-            final dropoff = rideRequest['dropoff_address'] ?? 'Unknown dropoff';
-            description = 'Ride from $pickup to $dropoff';
-          }
-
-          payments.add({
-            'id': payment['id'],
-            'amount': payment['amount'] ?? 0.0,
-            'description': description,
-            'date': _formatPaymentDate(payment['created_at']),
-            'status': payment['status'] ?? 'completed',
-            'payment_method': _formatPaymentMethod(payment['payment_method']),
-            'transaction_id': payment['transaction_id'],
-            'processed_at': payment['processed_at'],
-          });
+        String description = 'Payment';
+        if (rideRequest != null) {
+          final pickup = rideRequest['pickup_address'] ?? 'Unknown pickup';
+          final dropoff = rideRequest['dropoff_address'] ?? 'Unknown dropoff';
+          description = 'Ride from $pickup to $dropoff';
         }
 
-        return payments;
+        payments.add({
+          'id': payment['id'],
+          'amount': payment['amount'] ?? 0.0,
+          'description': description,
+          'date': _formatPaymentDate(payment['created_at']),
+          'status': payment['status'] ?? 'completed',
+          'payment_method': _formatPaymentMethod(payment['payment_method']),
+          'transaction_id': payment['transaction_id'],
+          'processed_at': payment['processed_at'],
+        });
       }
-    } catch (e) {
+
+      return payments;
+        } catch (e) {
       print('Error getting payment history: $e');
     }
 

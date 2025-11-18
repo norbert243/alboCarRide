@@ -18,6 +18,16 @@ class RideRequest {
   final double? pickupLng;
   final double? dropoffLat;
   final double? dropoffLng;
+  final double? estimatedDistance;
+  final int? estimatedDuration;
+  final String? vehicleTypePreference;
+  final String? paymentMethod;
+  final int? maxWaitTime;
+  final String? specialRequirements;
+  final DateTime? scheduledPickupTime;
+  final double? riderRatingThreshold;
+  final String? priorityLevel;
+  final String? acceptedOfferId;
 
   RideRequest({
     required this.id,
@@ -33,6 +43,16 @@ class RideRequest {
     this.pickupLng,
     this.dropoffLat,
     this.dropoffLng,
+    this.estimatedDistance,
+    this.estimatedDuration,
+    this.vehicleTypePreference,
+    this.paymentMethod,
+    this.maxWaitTime,
+    this.specialRequirements,
+    this.scheduledPickupTime,
+    this.riderRatingThreshold,
+    this.priorityLevel,
+    this.acceptedOfferId,
   });
 
   factory RideRequest.fromMap(Map<String, dynamic> map) {
@@ -52,6 +72,18 @@ class RideRequest {
       pickupLng: map['pickup_lng'] as double?,
       dropoffLat: map['dropoff_lat'] as double?,
       dropoffLng: map['dropoff_lng'] as double?,
+      estimatedDistance: map['estimated_distance'] as double?,
+      estimatedDuration: map['estimated_duration'] as int?,
+      vehicleTypePreference: map['vehicle_type_preference'] as String?,
+      paymentMethod: map['payment_method'] as String?,
+      maxWaitTime: map['max_wait_time'] as int?,
+      specialRequirements: map['special_requirements'] as String?,
+      scheduledPickupTime: map['scheduled_pickup_time'] != null
+          ? DateTime.parse(map['scheduled_pickup_time'] as String)
+          : null,
+      riderRatingThreshold: map['rider_rating_threshold'] as double?,
+      priorityLevel: map['priority_level'] as String?,
+      acceptedOfferId: map['accepted_offer_id'] as String?,
     );
   }
 
@@ -70,6 +102,16 @@ class RideRequest {
       'pickup_lng': pickupLng,
       'dropoff_lat': dropoffLat,
       'dropoff_lng': dropoffLng,
+      'estimated_distance': estimatedDistance,
+      'estimated_duration': estimatedDuration,
+      'vehicle_type_preference': vehicleTypePreference,
+      'payment_method': paymentMethod,
+      'max_wait_time': maxWaitTime,
+      'special_requirements': specialRequirements,
+      'scheduled_pickup_time': scheduledPickupTime?.toIso8601String(),
+      'rider_rating_threshold': riderRatingThreshold,
+      'priority_level': priorityLevel,
+      'accepted_offer_id': acceptedOfferId,
     };
   }
 }
@@ -87,6 +129,13 @@ class RideRequestService {
     required String dropoffAddress,
     required double proposedPrice,
     String? notes,
+    String? vehicleTypePreference,
+    String? paymentMethod,
+    int? maxWaitTime,
+    String? specialRequirements,
+    DateTime? scheduledPickupTime,
+    double? riderRatingThreshold,
+    String? priorityLevel,
   }) async {
     try {
       // Geocode addresses to get coordinates
@@ -98,6 +147,17 @@ class RideRequestService {
       if (pickupCoords == null) {
         throw Exception('Could not geocode pickup address');
       }
+
+      // Calculate estimated distance and duration
+      final routeInfo = await LocationService.calculateRoute(
+        pickupCoords['latitude'] as double,
+        pickupCoords['longitude'] as double,
+        dropoffCoords?['latitude'] as double ?? 0.0,
+        dropoffCoords?['longitude'] as double ?? 0.0,
+      );
+
+      final estimatedDistance = routeInfo?['distanceMiles'] ?? 0.0;
+      final estimatedDuration = routeInfo?['durationMinutes']?.toInt() ?? 0;
 
       final requestId = _generateUuid();
       final now = DateTime.now();
@@ -112,11 +172,24 @@ class RideRequestService {
             'proposed_price': proposedPrice,
             'status': 'pending',
             'created_at': now.toIso8601String(),
+            'expires_at': now
+                .add(const Duration(minutes: 15))
+                .toIso8601String(),
+            'updated_at': now.toIso8601String(),
             'notes': notes,
             'pickup_lat': pickupCoords['latitude'],
             'pickup_lng': pickupCoords['longitude'],
             'dropoff_lat': dropoffCoords?['latitude'],
             'dropoff_lng': dropoffCoords?['longitude'],
+            'estimated_distance': estimatedDistance,
+            'estimated_duration': estimatedDuration,
+            'vehicle_type_preference': vehicleTypePreference,
+            'payment_method': paymentMethod,
+            'max_wait_time': maxWaitTime ?? 10,
+            'special_requirements': specialRequirements,
+            'scheduled_pickup_time': scheduledPickupTime?.toIso8601String(),
+            'rider_rating_threshold': riderRatingThreshold,
+            'priority_level': priorityLevel ?? 'normal',
           })
           .select()
           .single();

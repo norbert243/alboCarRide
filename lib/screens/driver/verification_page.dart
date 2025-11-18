@@ -266,10 +266,9 @@ class _VerificationPageState extends State<VerificationPage> {
               const SizedBox(height: 24),
 
               // Document upload sections
-              _buildDocumentCard(DocumentType.driverLicense),
-              _buildDocumentCard(DocumentType.vehicleRegistration),
-              _buildDocumentCard(DocumentType.profilePhoto),
-              _buildDocumentCard(DocumentType.vehiclePhoto),
+              _buildDocumentCard(DocumentType.identityDocument),
+              _buildDocumentCard(DocumentType.profilePicture),
+              _buildDocumentCard(DocumentType.carDocuments),
 
               const SizedBox(height: 32),
 

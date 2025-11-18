@@ -45,8 +45,8 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
         final requestsResponse = await _supabase
             .from('ride_requests')
             .select('*')
-            .eq('customer_id', _customerId!)
-            .inFilter('status', ['pending', 'offered'])
+            .eq('rider_id', _customerId!)
+            .inFilter('status', ['pending', 'accepted'])
             .order('created_at', ascending: false);
 
         final requests = requestsResponse as List<dynamic>;
@@ -64,16 +64,13 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                 created_at,
                 profiles!ride_offers_driver_id_fkey(full_name, rating)
               ''')
-              .eq('ride_request_id', request['id'])
-              .inFilter('status', ['pending', 'countered'])
+              .eq('request_id', request['id'])
+              .inFilter('status', ['pending', 'accepted'])
               .order('created_at', ascending: false);
 
           final offers = offersResponse as List<dynamic>;
 
-          requestsWithOffers.add({
-            'request': request,
-            'offers': offers,
-          });
+          requestsWithOffers.add({'request': request, 'offers': offers});
         }
 
         setState(() {
@@ -99,17 +96,24 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
 
     // Subscribe to ride_offers changes for real-time updates
     final channel = _supabase.channel('ride_offers_updates');
-    _offersSubscription = channel.onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'ride_offers',
-          callback: (payload) {
-            _loadRideRequests();
-          },
-        ).subscribe() as StreamSubscription?;
+    _offersSubscription =
+        channel
+                .onPostgresChanges(
+                  event: PostgresChangeEvent.all,
+                  schema: 'public',
+                  table: 'ride_offers',
+                  callback: (payload) {
+                    _loadRideRequests();
+                  },
+                )
+                .subscribe()
+            as StreamSubscription?;
   }
 
-  Future<void> _acceptOffer(Map<String, dynamic> offer, Map<String, dynamic> request) async {
+  Future<void> _acceptOffer(
+    Map<String, dynamic> offer,
+    Map<String, dynamic> request,
+  ) async {
     setState(() => _isLoading = true);
 
     try {
@@ -117,8 +121,8 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
       final tripResponse = await _supabase.from('trips').insert({
         'customer_id': _customerId,
         'driver_id': offer['driver_id'],
-        'pickup_location': request['pickup_location'],
-        'dropoff_location': request['dropoff_location'],
+        'pickup_address': request['pickup_address'],
+        'dropoff_address': request['dropoff_address'],
         'final_price': offer['offer_price'],
         'status': 'accepted',
         'start_time': DateTime.now().toIso8601String(),
@@ -167,10 +171,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
           .update({'status': 'rejected'})
           .eq('id', offer['id']);
 
-      CustomToast.showInfo(
-        context: context,
-        message: 'Offer rejected',
-      );
+      CustomToast.showInfo(context: context, message: 'Offer rejected');
 
       await _loadRideRequests();
     } catch (e) {
@@ -191,7 +192,9 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Ride Request'),
-        content: const Text('Are you sure you want to cancel this ride request?'),
+        content: const Text(
+          'Are you sure you want to cancel this ride request?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -251,14 +254,15 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
   }
 
-  Widget _buildOfferCard(Map<String, dynamic> offer, Map<String, dynamic> request) {
+  Widget _buildOfferCard(
+    Map<String, dynamic> offer,
+    Map<String, dynamic> request,
+  ) {
     final driverProfile = offer['profiles'] as Map<String, dynamic>?;
     final driverName = driverProfile?['full_name'] ?? 'Unknown Driver';
     final driverRating = (driverProfile?['rating'] as num?)?.toDouble() ?? 0.0;
     final offerPrice = (offer['offer_price'] as num).toDouble();
-    final yourPrice = (request['suggested_price'] as num?)?.toDouble() ??
-        (request['estimated_fare'] as num?)?.toDouble() ??
-        0.0;
+    final yourPrice = (request['proposed_price'] as num?)?.toDouble() ?? 0.0;
 
     final priceDifference = offerPrice - yourPrice;
     final isCounterOffer = offer['status'] == 'countered';
@@ -295,7 +299,11 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.star, size: 16, color: Colors.amber),
+                            const Icon(
+                              Icons.star,
+                              size: 16,
+                              color: Colors.amber,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               driverRating.toStringAsFixed(1),
@@ -325,7 +333,9 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                           '${priceDifference > 0 ? '+' : ''}\$${priceDifference.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 14,
-                            color: priceDifference > 0 ? Colors.red : Colors.green,
+                            color: priceDifference > 0
+                                ? Colors.red
+                                : Colors.green,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -365,10 +375,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
               const SizedBox(height: 8),
               Text(
                 'Received ${_formatTimeAgo(offer['created_at'])}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
               Row(
@@ -412,9 +419,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
     final request = data['request'] as Map<String, dynamic>;
     final offers = data['offers'] as List<dynamic>;
 
-    final yourPrice = (request['suggested_price'] as num?)?.toDouble() ??
-        (request['estimated_fare'] as num?)?.toDouble() ??
-        0.0;
+    final yourPrice = (request['proposed_price'] as num?)?.toDouble() ?? 0.0;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 12),
@@ -457,7 +462,9 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    offers.isEmpty ? 'Waiting' : '${offers.length} Offer${offers.length > 1 ? 's' : ''}',
+                    offers.isEmpty
+                        ? 'Waiting'
+                        : '${offers.length} Offer${offers.length > 1 ? 's' : ''}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -471,14 +478,15 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
             _buildLocationRow(
               Icons.location_on_outlined,
               'From',
-              request['pickup_location'],
+              request['pickup_address'],
             ),
             _buildLocationRow(
               Icons.flag_outlined,
               'To',
-              request['dropoff_location'],
+              request['dropoff_address'],
             ),
-            if (request['notes'] != null && (request['notes'] as String).isNotEmpty) ...[
+            if (request['notes'] != null &&
+                (request['notes'] as String).isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.all(8),
@@ -489,7 +497,11 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.note_outlined, size: 16, color: Colors.grey),
+                    const Icon(
+                      Icons.note_outlined,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -507,10 +519,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
             const SizedBox(height: 8),
             Text(
               'Requested ${_formatTimeAgo(request['created_at'])}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
             if (offers.isEmpty) ...[
               const SizedBox(height: 16),
@@ -531,10 +540,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                     const Expanded(
                       child: Text(
                         'Waiting for drivers to respond...',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.orange,
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.orange),
                       ),
                     ),
                   ],
@@ -547,10 +553,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
               const SizedBox(height: 8),
               const Text(
                 'Driver Offers',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               ...offers.map((offer) => _buildOfferCard(offer, request)),
@@ -562,9 +565,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
                 onPressed: _isLoading ? null : () => _cancelRequest(request),
                 icon: const Icon(Icons.cancel_outlined, size: 18),
                 label: const Text('Cancel Request'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                ),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
               ),
             ),
           ],
@@ -620,55 +621,52 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
       body: _isLoading && _rideRequests.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : _rideRequests.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.directions_car_outlined,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No Active Requests',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Book a ride to see requests here',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Book a Ride'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.directions_car_outlined,
+                    size: 64,
+                    color: Colors.grey[400],
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadRideRequests,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _rideRequests.length,
-                    itemBuilder: (context, index) =>
-                        _buildRequestCard(_rideRequests[index]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No Active Requests',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[600],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Book a ride to see requests here',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Book a Ride'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadRideRequests,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _rideRequests.length,
+                itemBuilder: (context, index) =>
+                    _buildRequestCard(_rideRequests[index]),
+              ),
+            ),
     );
   }
 }

@@ -6,13 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as path;
 
 /// Types of documents that can be uploaded for driver verification
-enum DocumentType {
-  driverLicense,
-  vehicleRegistration,
-  profilePhoto,
-  vehiclePhoto,
-  depositProof,
-}
+enum DocumentType { identityDocument, profilePicture, carDocuments }
 
 /// Service for handling document uploads with compression and Supabase storage
 class DocumentUploadService {
@@ -330,43 +324,32 @@ class DocumentUploadService {
 extension DocumentTypeExtension on DocumentType {
   String get displayName {
     switch (this) {
-      case DocumentType.driverLicense:
-        return 'Driver License';
-      case DocumentType.vehicleRegistration:
-        return 'Vehicle Registration';
-      case DocumentType.profilePhoto:
-        return 'Profile Photo';
-      case DocumentType.vehiclePhoto:
-        return 'Vehicle Photo';
-      case DocumentType.depositProof:
-        return 'Deposit Proof';
+      case DocumentType.identityDocument:
+        return 'Identity Document';
+      case DocumentType.profilePicture:
+        return 'Profile Picture';
+      case DocumentType.carDocuments:
+        return 'Car Documents';
     }
   }
 
   String get description {
     switch (this) {
-      case DocumentType.driverLicense:
-        return 'Upload a clear photo of your valid driver\'s license';
-      case DocumentType.vehicleRegistration:
-        return 'Upload your vehicle registration document';
-      case DocumentType.profilePhoto:
+      case DocumentType.identityDocument:
+        return 'Upload a clear photo of your valid ID document (passport, driver\'s license, or national ID)';
+      case DocumentType.profilePicture:
         return 'Upload a clear profile photo for identification';
-      case DocumentType.vehiclePhoto:
-        return 'Upload photos showing your vehicle from multiple angles';
-      case DocumentType.depositProof:
-        return 'Upload proof of your deposit payment';
+      case DocumentType.carDocuments:
+        return 'Upload your vehicle registration and insurance documents';
     }
   }
 
   bool get isRequired {
     switch (this) {
-      case DocumentType.driverLicense:
-      case DocumentType.vehicleRegistration:
+      case DocumentType.identityDocument:
+      case DocumentType.profilePicture:
+      case DocumentType.carDocuments:
         return true;
-      case DocumentType.profilePhoto:
-      case DocumentType.vehiclePhoto:
-      case DocumentType.depositProof:
-        return false;
     }
   }
 }

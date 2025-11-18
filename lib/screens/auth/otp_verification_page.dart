@@ -220,7 +220,15 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
         final vehicleType =
             profileResponse['drivers']?['vehicle_type'] as String?;
 
-        if (isNewUser) {
+        print('🚗 Driver navigation debug:');
+        print('  isNewUser: $isNewUser');
+        print('  verificationStatus: $verificationStatus');
+        print('  vehicleType: $vehicleType');
+
+        // For new drivers, always go to vehicle type selection first
+        // For existing drivers without vehicle type, also go to vehicle type selection
+        if (isNewUser || vehicleType == null || vehicleType.isEmpty) {
+          print('  🎯 Navigating to vehicle type selection');
           Navigator.pushNamedAndRemoveUntil(
             context,
             '/vehicle-type-selection',
