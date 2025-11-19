@@ -77,7 +77,11 @@ serve(async (req) => {
       const errorText = await twilioResponse.text()
       console.error('Twilio error:', errorText)
       return new Response(
-        JSON.stringify({ error: 'Failed to send OTP via SMS' }),
+        JSON.stringify({
+          error: 'Failed to send OTP via SMS',
+          details: errorText,
+          twilioStatus: twilioResponse.status
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }

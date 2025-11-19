@@ -6,7 +6,7 @@ import 'package:albocarride/services/location_service.dart';
 /// Represents a ride request from a customer
 class RideRequest {
   final String id;
-  final String riderId;
+  final String customerId;
   final String pickupAddress;
   final String dropoffAddress;
   final double proposedPrice;
@@ -31,7 +31,7 @@ class RideRequest {
 
   RideRequest({
     required this.id,
-    required this.riderId,
+    required this.customerId,
     required this.pickupAddress,
     required this.dropoffAddress,
     required this.proposedPrice,
@@ -58,10 +58,10 @@ class RideRequest {
   factory RideRequest.fromMap(Map<String, dynamic> map) {
     return RideRequest(
       id: map['id'] as String,
-      riderId: map['rider_id'] as String,
-      pickupAddress: map['pickup_address'] as String,
-      dropoffAddress: map['dropoff_address'] as String,
-      proposedPrice: (map['proposed_price'] as num).toDouble(),
+      customerId: map['customer_id'] as String,
+      pickupAddress: map['pickup_location'] as String,
+      dropoffAddress: map['dropoff_location'] as String,
+      proposedPrice: (map['suggested_price'] as num).toDouble(),
       status: map['status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: map['updated_at'] != null
@@ -90,10 +90,10 @@ class RideRequest {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'rider_id': riderId,
-      'pickup_address': pickupAddress,
-      'dropoff_address': dropoffAddress,
-      'proposed_price': proposedPrice,
+      'customer_id': customerId,
+      'pickup_location': pickupAddress,
+      'dropoff_location': dropoffAddress,
+      'suggested_price': proposedPrice,
       'status': status,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
@@ -124,7 +124,7 @@ class RideRequestService {
 
   /// Create a new ride request
   Future<RideRequest> createRequest({
-    required String riderId,
+    required String customerId,
     required String pickupAddress,
     required String dropoffAddress,
     required double proposedPrice,
@@ -166,10 +166,10 @@ class RideRequestService {
           .from('ride_requests')
           .insert({
             'id': requestId,
-            'rider_id': riderId,
-            'pickup_address': pickupAddress,
-            'dropoff_address': dropoffAddress,
-            'proposed_price': proposedPrice,
+            'customer_id': customerId,
+            'pickup_location': pickupAddress,
+            'dropoff_location': dropoffAddress,
+            'suggested_price': proposedPrice,
             'status': 'pending',
             'created_at': now.toIso8601String(),
             'expires_at': now
@@ -241,32 +241,32 @@ class RideRequestService {
     }
   }
 
-  /// Get all ride requests for a specific rider
-  Future<List<RideRequest>> getRiderRequests(String riderId) async {
+  /// Get all ride requests for a specific customer
+  Future<List<RideRequest>> getCustomerRequests(String customerId) async {
     try {
       final response = await _supabase
           .from('ride_requests')
           .select()
-          .eq('rider_id', riderId)
+          .eq('customer_id', customerId)
           .order('created_at', ascending: false);
 
       return (response as List)
           .map((request) => RideRequest.fromMap(request))
           .toList();
     } on PostgrestException catch (e) {
-      throw Exception('Failed to fetch rider requests: ${e.message}');
+      throw Exception('Failed to fetch customer requests: ${e.message}');
     } catch (e) {
-      throw Exception('Unexpected error fetching rider requests: $e');
+      throw Exception('Unexpected error fetching customer requests: $e');
     }
   }
 
-  /// Get active (pending) ride requests for a rider
-  Future<List<RideRequest>> getActiveRequests(String riderId) async {
+  /// Get active (pending) ride requests for a customer
+  Future<List<RideRequest>> getActiveRequests(String customerId) async {
     try {
       final response = await _supabase
           .from('ride_requests')
           .select()
-          .eq('rider_id', riderId)
+          .eq('customer_id', customerId)
           .eq('status', 'pending')
           .order('created_at', ascending: false);
 
@@ -280,12 +280,12 @@ class RideRequestService {
     }
   }
 
-  /// Subscribe to real-time updates for a rider's requests
-  Stream<List<RideRequest>> watchRiderRequests(String riderId) {
+  /// Subscribe to real-time updates for a customer's requests
+  Stream<List<RideRequest>> watchCustomerRequests(String customerId) {
     final controller = StreamController<List<RideRequest>>();
 
     // Get initial data
-    getRiderRequests(riderId)
+    getCustomerRequests(customerId)
         .then((requests) {
           controller.add(requests);
         })
@@ -299,11 +299,14 @@ class RideRequestService {
         .stream(primaryKey: ['id'])
         .listen((event) {
           try {
-            // Filter for this rider's requests
+            // Filter for this customer's requests
             final requests =
                 (event as List)
-                    .where((request) => request['rider_id'] == riderId)
-                    .map((request) => RideRequest.fromMap(request))
+                    .where((request) => request['customer_id'] == customerId)
+                    .map(
+                      (request) =>
+                          RideRequest.fromMap(request as Map<String, dynamic>),
+                    )
                     .toList()
                   ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             controller.add(requests);
@@ -320,11 +323,11 @@ class RideRequestService {
   }
 
   /// Subscribe to real-time updates for active requests
-  Stream<List<RideRequest>> watchActiveRequests(String riderId) {
+  Stream<List<RideRequest>> watchActiveRequests(String customerId) {
     final controller = StreamController<List<RideRequest>>();
 
     // Get initial data
-    getActiveRequests(riderId)
+    getActiveRequests(customerId)
         .then((requests) {
           controller.add(requests);
         })
@@ -338,15 +341,18 @@ class RideRequestService {
         .stream(primaryKey: ['id'])
         .listen((event) {
           try {
-            // Filter for this rider's active requests
+            // Filter for this customer's active requests
             final requests =
                 (event as List)
                     .where(
                       (request) =>
-                          request['rider_id'] == riderId &&
+                          request['customer_id'] == customerId &&
                           request['status'] == 'pending',
                     )
-                    .map((request) => RideRequest.fromMap(request))
+                    .map(
+                      (request) =>
+                          RideRequest.fromMap(request as Map<String, dynamic>),
+                    )
                     .toList()
                   ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             controller.add(requests);
@@ -362,13 +368,13 @@ class RideRequestService {
     return controller.stream;
   }
 
-  /// Get request statistics for a rider
-  Future<Map<String, int>> getRequestStats(String riderId) async {
+  /// Get request statistics for a customer
+  Future<Map<String, int>> getRequestStats(String customerId) async {
     try {
       final response = await _supabase
           .from('ride_requests')
           .select('status')
-          .eq('rider_id', riderId);
+          .eq('customer_id', customerId);
 
       final stats = {
         'total': 0,

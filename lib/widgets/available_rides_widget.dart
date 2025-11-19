@@ -101,6 +101,11 @@ class _AvailableRidesWidgetState extends State<AvailableRidesWidget> {
           'dropoff_latitude': ride['dropoff_latitude'] as double?,
           'dropoff_longitude': ride['dropoff_longitude'] as double?,
         });
+
+        // Record that this driver has viewed this ride request
+        if (_driverId != null) {
+          _recordRideView(ride['id']);
+        }
       }
 
       if (mounted) {
@@ -117,6 +122,28 @@ class _AvailableRidesWidgetState extends State<AvailableRidesWidget> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Record that this driver has viewed a specific ride request
+  /// This updates the real-time driver viewing counter on the customer side
+  Future<void> _recordRideView(String rideRequestId) async {
+    if (_driverId == null) return;
+
+    try {
+      // Upsert: insert if not exists, update viewed_at if exists
+      await _supabase.from('ride_request_views').upsert(
+        {
+          'ride_request_id': rideRequestId,
+          'driver_id': _driverId,
+          'viewed_at': DateTime.now().toIso8601String(),
+        },
+        onConflict: 'ride_request_id,driver_id', // Update if this driver already viewed
+      );
+    } catch (e) {
+      // Silently fail if table doesn't exist yet or other errors
+      // This is non-critical functionality
+      print('Note: Could not record ride view (table may not exist): $e');
     }
   }
 

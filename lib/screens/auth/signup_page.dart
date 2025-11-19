@@ -54,7 +54,7 @@ class _SignupPageState extends State<SignupPage> {
       print('🔵 SIGNUP: Full name: $fullName');
       print('🔵 SIGNUP: Role: ${widget.role}');
 
-      // Call Supabase Edge Function to send OTP
+      // Call Supabase Edge Function to send OTP via Twilio
       final supabaseUrl = dotenv.env['SUPABASE_URL'];
       final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
 
@@ -67,9 +67,7 @@ class _SignupPageState extends State<SignupPage> {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $supabaseAnonKey',
         },
-        body: jsonEncode({
-          'phoneNumber': phoneNumber,
-        }),
+        body: jsonEncode({'phoneNumber': phoneNumber}),
       );
 
       print('🔵 SIGNUP: Response status code: ${response.statusCode}');
@@ -100,10 +98,7 @@ class _SignupPageState extends State<SignupPage> {
         final errorMessage = errorData['error'] ?? 'Failed to send OTP';
 
         if (mounted) {
-          CustomToast.showError(
-            context: context,
-            message: errorMessage,
-          );
+          CustomToast.showError(context: context, message: errorMessage);
         }
       }
     } catch (error) {
@@ -111,7 +106,8 @@ class _SignupPageState extends State<SignupPage> {
       if (mounted) {
         CustomToast.showError(
           context: context,
-          message: 'Failed to send verification code. Please check your connection.',
+          message:
+              'Failed to send verification code. Please check your connection.',
         );
       }
     } finally {
@@ -120,7 +116,6 @@ class _SignupPageState extends State<SignupPage> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -155,10 +150,7 @@ class _SignupPageState extends State<SignupPage> {
                 const SizedBox(height: 12),
                 Text(
                   'AlboCarRide will send you a verification code',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                  style: const TextStyle(fontSize: 16, color: Colors.grey),
                 ),
                 const SizedBox(height: 40),
                 TextFormField(
@@ -247,10 +239,7 @@ class _SignupPageState extends State<SignupPage> {
                 const SizedBox(height: 24),
                 Text(
                   'You\'ll receive a 6-digit code to verify next',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
                 ),
                 const Spacer(),
                 ElevatedButton(

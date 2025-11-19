@@ -79,10 +79,12 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
       }
     } catch (e) {
       print('Error loading ride requests: $e');
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to load ride requests',
-      );
+      if (mounted) {
+        CustomToast.showError(
+          context: context,
+          message: 'Failed to load ride requests: ${e.toString()}',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

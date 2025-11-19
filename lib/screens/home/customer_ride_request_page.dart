@@ -5,6 +5,9 @@ import '../../services/ride_request_service.dart';
 import '../../services/location_service.dart';
 import '../../services/driver_location_service.dart';
 import '../../widgets/custom_toast.dart';
+import '../../services/saved_address_service.dart';
+import '../../services/recent_destinations_service.dart';
+import '../customer/saved_addresses_page.dart';
 
 class CustomerRideRequestPage extends StatefulWidget {
   const CustomerRideRequestPage({super.key});
@@ -120,7 +123,7 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     setState(() => _isLoading = true);
     try {
       await _requestService.createRequest(
-        riderId: _riderId!,
+        customerId: _riderId!,
         pickupAddress: _pickupController.text,
         dropoffAddress: _dropoffController.text,
         proposedPrice: price,
@@ -218,6 +221,35 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
+
+            // Quick Access Buttons
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.home, size: 18),
+                    label: const Text('Saved'),
+                    onPressed: _showSavedAddresses,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.history, size: 18),
+                    label: const Text('Recent'),
+                    onPressed: _showRecentDestinations,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
 
             // Pickup Location
             TextField(
@@ -330,10 +362,10 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
             ..._activeRequests
                 .map(
                   (request) => ListTile(
-                    title: Text(request['pickup_address'] ?? ''),
-                    subtitle: Text(request['dropoff_address'] ?? ''),
+                    title: Text(request['pickup_location'] ?? ''),
+                    subtitle: Text(request['dropoff_location'] ?? ''),
                     trailing: Text(
-                      '\$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
+                      '\$${request['suggested_price']?.toStringAsFixed(2) ?? '0.00'}',
                     ),
                     leading: const Icon(Icons.directions_car),
                     onTap: () {
@@ -346,10 +378,10 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('From: ${request['pickup_address']}'),
-                              Text('To: ${request['dropoff_address']}'),
+                              Text('From: ${request['pickup_location']}'),
+                              Text('To: ${request['dropoff_location']}'),
                               Text(
-                                'Price: \$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
+                                'Price: \$${request['suggested_price']?.toStringAsFixed(2) ?? '0.00'}',
                               ),
                               if (request['notes'] != null)
                                 Text('Notes: ${request['notes']}'),
@@ -378,6 +410,75 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showSavedAddresses() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SavedAddressesPage(selectMode: true),
+      ),
+    );
+
+    if (result != null && result is Map<String, dynamic>) {
+      setState(() {
+        _dropoffController.text = result['address'] ?? '';
+      });
+    }
+  }
+
+  Future<void> _showRecentDestinations() async {
+    if (_riderId == null) return;
+
+    final service = RecentDestinationsService(Supabase.instance.client);
+    final destinations = await service.getRecentDestinations(_riderId!);
+
+    if (destinations.isEmpty) {
+      if (mounted) {
+        CustomToast.showInfo(
+          context: context,
+          message: 'No recent destinations yet. Complete a ride first!',
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        builder: (context) => ListView.builder(
+          itemCount: destinations.length,
+          itemBuilder: (context, index) {
+            final dest = destinations[index];
+            return ListTile(
+              leading: const Icon(Icons.history, color: Colors.blue),
+              title: Text(dest.address),
+              subtitle: Text('Visited ${dest.visitCount} times'),
+              trailing: Text(
+                _formatDate(dest.lastVisitedAt),
+                style: const TextStyle(fontSize: 12),
+              ),
+              onTap: () {
+                setState(() {
+                  _dropoffController.text = dest.address;
+                });
+                Navigator.pop(context);
+              },
+            );
+          },
+        ),
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override

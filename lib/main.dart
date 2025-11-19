@@ -13,8 +13,10 @@ import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
+import 'package:albocarride/screens/home/customer_main_navigation.dart';
 import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
 import 'package:albocarride/screens/home/book_ride_page.dart';
+import 'package:albocarride/screens/home/indrive_book_ride_complete.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
@@ -210,7 +212,7 @@ class MyApp extends StatelessWidget {
           color: Colors.white,
         ),
       ),
-      home: const AuthWrapper(),
+      home: const AuthWrapper(), // Production: Phone authentication with Twilio
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
@@ -228,8 +230,8 @@ class MyApp extends StatelessWidget {
         '/waiting-review': (context) => const WaitingForReviewPage(),
         '/enhanced-driver-home': (context) =>
             const ComprehensiveDriverDashboard(),
-        '/customer_home': (context) => const CustomerHomePage(),
-        '/book-ride': (context) => const BookRidePage(),
+        '/customer_home': (context) => const CustomerMainNavigation(),
+        '/book-ride': (context) => const InDriverBookRideComplete(),
         '/my-ride-requests': (context) => const MyRideRequestsPage(),
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),

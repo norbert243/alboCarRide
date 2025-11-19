@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/widgets/sos_button.dart';
+import 'package:albocarride/screens/payment/trip_payment_page.dart';
 
 class RiderTripTrackingPage extends StatefulWidget {
   final String tripId;
@@ -17,6 +19,7 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
   late TripService _tripService;
   Trip? _currentTrip;
   bool _isLoading = true;
+  String? _previousStatus;
 
   @override
   void initState() {
@@ -47,11 +50,39 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
   void _setupTripSubscription() {
     _tripService.subscribeToTrip(widget.tripId).listen((trip) {
       if (mounted && trip.id.isNotEmpty) {
+        final previousStatus = _previousStatus;
         setState(() {
           _currentTrip = trip;
+          _previousStatus = trip.status;
         });
+
+        // Navigate to payment when trip becomes completed
+        if (trip.status == 'completed' && previousStatus != 'completed') {
+          _navigateToPayment();
+        }
       }
     });
+  }
+
+  Future<void> _navigateToPayment() async {
+    if (_currentTrip == null) return;
+
+    // Small delay to ensure UI updates
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TripPaymentPage(
+            tripId: _currentTrip!.id,
+            driverId: _currentTrip!.driverId,
+            amount: _currentTrip!.finalPrice ?? _currentTrip!.estimatedPrice,
+            commissionRate: 0.10, // 10% commission
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _cancelTrip() async {
@@ -378,6 +409,12 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
                 ],
               ),
             ),
+      floatingActionButton: _currentTrip != null
+          ? SosButton(
+              userRole: 'customer',
+              tripId: widget.tripId,
+            )
+          : null,
     );
   }
 }

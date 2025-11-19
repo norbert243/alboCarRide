@@ -3,6 +3,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Emergency SOS - SMS permissions -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- Internet and network state -->
+    <uses-permission android:name="android.permission.INTERNET" />
     
     <!-- Internet permission for Google Maps -->
     <uses-permission android:name="android.permission.INTERNET" />
