@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/trip_service.dart';
+import 'package:albocarride/services/live_location_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/widgets/sos_button.dart';
@@ -17,8 +19,12 @@ class RiderTripTrackingPage extends StatefulWidget {
 
 class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
   late TripService _tripService;
+  final LiveLocationService _locationService = LiveLocationService(
+    Supabase.instance.client,
+  );
   Trip? _currentTrip;
   bool _isLoading = true;
+  bool _isSharingLocation = false;
   String? _previousStatus;
 
   @override
@@ -117,6 +123,43 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _shareLocation() async {
+    if (_isSharingLocation) return;
+
+    setState(() => _isSharingLocation = true);
+
+    try {
+      // Get current location
+      final position = await _locationService.getCurrentLocation();
+      if (position == null) {
+        throw Exception('Unable to get current location');
+      }
+
+      // Share with trip context
+      await _locationService.shareLocation(
+        position: position,
+        customMessage:
+            '📍 I\'m on my way! Track my live location:\nTrip ID: ${widget.tripId}',
+      );
+
+      if (mounted) {
+        CustomToast.showSuccess(
+          context: context,
+          message: 'Location shared successfully',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        CustomToast.showError(
+          context: context,
+          message: 'Failed to share location: ${e.toString()}',
+        );
+      }
+    } finally {
+      setState(() => _isSharingLocation = false);
+    }
   }
 
   Widget _buildStatusIndicator() {
@@ -409,10 +452,62 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
                 ],
               ),
             ),
-      floatingActionButton: _currentTrip != null
-          ? SosButton(
-              userRole: 'customer',
-              tripId: widget.tripId,
+      floatingActionButton: _currentTrip != null && _currentTrip!.status == 'in_progress'
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Share Location Button
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Share location',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    FloatingActionButton(
+                      heroTag: 'share_location',
+                      onPressed: _isSharingLocation ? null : _shareLocation,
+                      backgroundColor: const Color(0xFF2196F3),
+                      child: _isSharingLocation
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.share_location, color: Colors.white),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // SOS Button
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Hold for 3s',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SosButton(
+                      isDriver: false,
+                      tripId: widget.tripId,
+                    ),
+                  ],
+                ),
+              ],
             )
           : null,
     );

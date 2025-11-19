@@ -233,7 +233,7 @@ class _EmergencyContactsPageState extends State<EmergencyContactsPage> {
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 40),
                         child: Text(
-                          'Add up to 3 emergency contacts who will be notified if you trigger an SOS alert',
+                          'Store 3 trusted contacts who will receive an SMS/WhatsApp alert with your live location if you use the SOS button during a trip',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey),
                         ),
@@ -265,7 +265,7 @@ class _EmergencyContactsPageState extends State<EmergencyContactsPage> {
                               SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'These contacts will receive SMS/WhatsApp alerts with your live location during an emergency.',
+                                  'Store 3 trusted contacts who will receive an SMS/WhatsApp alert with your live location if you use the SOS button during a trip.',
                                   style: TextStyle(fontSize: 13),
                                 ),
                               ),

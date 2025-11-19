@@ -182,6 +182,7 @@ class _AddSavedPlacePageState extends State<AddSavedPlacePage> {
           address: _selectedAddress,
           latitude: _currentCenter!.latitude,
           longitude: _currentCenter!.longitude,
+          existingPlace: widget.existingPlace, // Pass existing place for editing
         ),
       ),
     ).then((result) {

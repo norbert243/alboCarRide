@@ -53,20 +53,22 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       // Check verification status and vehicle type
       await _loadDriverProfile();
 
+      // ⚠️ TEMPORARY: BYPASS VERIFICATION CHECKS FOR TESTING
+      // TODO: Remove this bypass before production
       // Handle verification status
-      if (_verificationStatus == 'pending') {
-        _redirectToWaitingForReview();
-        return;
-      } else if (_verificationStatus != 'approved') {
-        _redirectToVerification();
-        return;
-      }
+      // if (_verificationStatus == 'pending') {
+      //   _redirectToWaitingForReview();
+      //   return;
+      // } else if (_verificationStatus != 'approved') {
+      //   _redirectToVerification();
+      //   return;
+      // }
 
       // Check if vehicle type is set
-      if (_vehicleType == null || _vehicleType!.isEmpty) {
-        _redirectToVehicleTypeSelection();
-        return;
-      }
+      // if (_vehicleType == null || _vehicleType!.isEmpty) {
+      //   _redirectToVehicleTypeSelection();
+      //   return;
+      // }
 
       // Load online status and active trip
       await _loadOnlineStatus();

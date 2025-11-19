@@ -145,8 +145,13 @@ class WaitingForReviewPage extends StatelessWidget {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    // Navigate back to auth wrapper
-                    Navigator.pushNamed(context, '/auth_wrapper');
+                    // ⚠️ TEMPORARY: For testing, navigate directly to driver home
+                    // TODO: Remove this bypass before production
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/enhanced-driver-home',
+                      (route) => false,
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,

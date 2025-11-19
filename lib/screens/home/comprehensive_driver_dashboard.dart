@@ -94,20 +94,22 @@ class _ComprehensiveDriverDashboardState
       // Check verification status and load profile data
       await _loadDriverProfile();
 
+      // ⚠️ TEMPORARY: BYPASS VERIFICATION CHECKS FOR TESTING
+      // TODO: Remove this bypass before production
       // Handle verification status
-      if (_verificationStatus == 'pending') {
-        _redirectToWaitingForReview();
-        return;
-      } else if (_verificationStatus != 'approved') {
-        _redirectToVerification();
-        return;
-      }
+      // if (_verificationStatus == 'pending') {
+      //   _redirectToWaitingForReview();
+      //   return;
+      // } else if (_verificationStatus != 'approved') {
+      //   _redirectToVerification();
+      //   return;
+      // }
 
       // Check if vehicle type is set
-      if (_vehicleType == null || _vehicleType!.isEmpty) {
-        _redirectToVehicleTypeSelection();
-        return;
-      }
+      // if (_vehicleType == null || _vehicleType!.isEmpty) {
+      //   _redirectToVehicleTypeSelection();
+      //   return;
+      // }
 
       // Load all driver data
       await _loadDriverData();

@@ -9,12 +9,14 @@ class NameSavedPlacePage extends StatefulWidget {
   final String address;
   final double latitude;
   final double longitude;
+  final Map<String, dynamic>? existingPlace; // For editing existing place
 
   const NameSavedPlacePage({
     super.key,
     required this.address,
     required this.latitude,
     required this.longitude,
+    this.existingPlace,
   });
 
   @override
@@ -35,6 +37,13 @@ class _NameSavedPlacePageState extends State<NameSavedPlacePage> {
   @override
   void initState() {
     super.initState();
+
+    // If editing, pre-fill name and icon
+    if (widget.existingPlace != null) {
+      _nameController.text = widget.existingPlace!['name'] ?? '';
+      _selectedIcon = widget.existingPlace!['icon'];
+    }
+
     // Auto-focus name field when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _nameFocus.requestFocus();
@@ -88,32 +97,47 @@ class _NameSavedPlacePageState extends State<NameSavedPlacePage> {
       }
 
       final name = _nameController.text.trim();
-      final icon = _selectedIcon ?? '📍'; // Default to pin if not selected
+      final icon = _selectedIcon ?? 'place'; // Default to place icon if not selected
 
-      // Insert into saved_places table
-      await Supabase.instance.client.from('saved_places').insert({
-        'user_id': userId,
-        'name': name,
-        'address': widget.address,
-        'latitude': widget.latitude,
-        'longitude': widget.longitude,
-        'icon': icon,
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      if (widget.existingPlace != null) {
+        // UPDATE existing place
+        await Supabase.instance.client
+            .from('saved_places')
+            .update({
+          'name': name,
+          'address': widget.address,
+          'latitude': widget.latitude,
+          'longitude': widget.longitude,
+          'icon': icon,
+        }).eq('id', widget.existingPlace!['id']);
+      } else {
+        // INSERT new place
+        await Supabase.instance.client.from('saved_places').insert({
+          'user_id': userId,
+          'name': name,
+          'address': widget.address,
+          'latitude': widget.latitude,
+          'longitude': widget.longitude,
+          'icon': icon,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
 
       // Show success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('Place saved successfully'),
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text(widget.existingPlace != null
+                    ? 'Place updated successfully'
+                    : 'Place saved successfully'),
               ],
             ),
-            backgroundColor: Color(0xFF4CAF50),
-            duration: Duration(seconds: 2),
+            backgroundColor: const Color(0xFF4CAF50),
+            duration: const Duration(seconds: 2),
           ),
         );
 
@@ -151,9 +175,9 @@ class _NameSavedPlacePageState extends State<NameSavedPlacePage> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF424242)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Name this place',
-          style: TextStyle(
+        title: Text(
+          widget.existingPlace != null ? 'Edit place' : 'Name this place',
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w500,
             color: Color(0xFF212121),

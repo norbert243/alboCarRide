@@ -272,15 +272,19 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
               );
             }
           } else if (verificationStatus == 'pending') {
+            // ⚠️ TEMPORARY: For testing, navigate directly to driver home
+            // TODO: Remove this bypass before production
             Navigator.pushNamedAndRemoveUntil(
               context,
-              '/waiting-review',
+              '/enhanced-driver-home',
               (route) => false,
             );
           } else if (verificationStatus == 'rejected') {
+            // ⚠️ TEMPORARY: For testing, navigate directly to driver home
+            // TODO: Remove this bypass before production
             Navigator.pushNamedAndRemoveUntil(
               context,
-              '/verification',
+              '/enhanced-driver-home',
               (route) => false,
             );
           } else if (verificationStatus == 'approved') {

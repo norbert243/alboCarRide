@@ -361,7 +361,7 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
             ),
       floatingActionButton: _currentTrip != null
           ? SosButton(
-              userRole: 'driver',
+              isDriver: true,
               tripId: widget.tripId,
             )
           : null,
