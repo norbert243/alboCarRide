@@ -7,7 +7,7 @@ import 'package:albocarride/screens/auth/signup_page.dart';
 import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
-import 'package:albocarride/screens/home/customer_home_page.dart';
+import 'package:albocarride/screens/home/customer_main_navigation.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
 import 'package:albocarride/services/session_service.dart';
 
@@ -189,7 +189,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         } else {
           _navigateToVerification();
         }
-            } else {
+      } else {
         // Customer - go to customer home
         _navigateToCustomerHome();
       }
@@ -340,7 +340,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _navigateToCustomerHome() {
     if (!mounted) return;
     setState(() {
-      _targetPage = const CustomerHomePage();
+      _targetPage = const CustomerMainNavigation();
       _isLoading = false;
     });
   }
