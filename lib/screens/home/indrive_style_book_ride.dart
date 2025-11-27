@@ -104,9 +104,7 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _WhereToSearchSheet(
-        currentLocation: _pickupLatLng,
-      ),
+      builder: (context) => _WhereToSearchSheet(currentLocation: _pickupLatLng),
     );
 
     if (result != null) {
@@ -144,9 +142,7 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
       ),
     );
 
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 100),
-    );
+    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
   }
 
   Future<void> _findDriver() async {
@@ -162,19 +158,18 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
 
     try {
       // Create ride request
-      final response = await Supabase.instance.client
-          .from('ride_requests')
-          .insert({
-        'customer_id': _customerId,
-        'pickup_location': _pickupAddress,
-        'pickup_latitude': _pickupLatLng!.latitude,
-        'pickup_longitude': _pickupLatLng!.longitude,
-        'dropoff_location': _dropoffAddress,
-        'dropoff_latitude': _dropoffLatLng!.latitude,
-        'dropoff_longitude': _dropoffLatLng!.longitude,
-        'suggested_price': _suggestedPrice,
-        'status': 'pending',
-      }).select();
+      final response =
+          await Supabase.instance.client.from('ride_requests').insert({
+            'customer_id': _customerId,
+            'pickup_location': _pickupAddress,
+            'pickup_latitude': _pickupLatLng!.latitude,
+            'pickup_longitude': _pickupLatLng!.longitude,
+            'dropoff_location': _dropoffAddress,
+            'dropoff_latitude': _dropoffLatLng!.latitude,
+            'dropoff_longitude': _dropoffLatLng!.longitude,
+            'suggested_price': _suggestedPrice,
+            'status': 'pending',
+          }).select();
 
       if (response.isNotEmpty) {
         setState(() {
@@ -201,44 +196,52 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
   }
 
   void _startDriverViewingCounter() {
-    _viewingCounterTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (timer) async {
-        if (_activeRequestId == null) {
-          timer.cancel();
-          return;
-        }
+    _viewingCounterTimer = Timer.periodic(const Duration(seconds: 3), (
+      timer,
+    ) async {
+      if (_activeRequestId == null) {
+        timer.cancel();
+        return;
+      }
 
-        // Simulate driver viewing count (in production, get from realtime)
-        // This would be tracked when drivers view the request
-        setState(() {
-          _driversViewing = (DateTime.now().second % 7) + 1; // Demo: 1-7 drivers
-        });
-      },
-    );
+      // Simulate driver viewing count (in production, get from realtime)
+      // This would be tracked when drivers view the request
+      setState(() {
+        _driversViewing = (DateTime.now().second % 7) + 1; // Demo: 1-7 drivers
+      });
+    });
   }
 
   void _subscribeToDriverOffers() {
     if (_activeRequestId == null) return;
 
-    final channel = Supabase.instance.client
-        .channel('driver_offers_${_activeRequestId}');
+    try {
+      final channel = Supabase.instance.client.channel(
+        'driver_offers_${_activeRequestId}',
+      );
 
-    _offersSubscription = channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'ride_offers',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'ride_request_id',
-            value: _activeRequestId,
-          ),
-          callback: (payload) {
-            _loadDriverOffer(payload.newRecord['id']);
-          },
-        )
-        .subscribe() as StreamSubscription?;
+      _offersSubscription =
+          channel
+                  .onPostgresChanges(
+                    event: PostgresChangeEvent.insert,
+                    schema: 'public',
+                    table: 'ride_offers',
+                    filter: PostgresChangeFilter(
+                      type: PostgresChangeFilterType.eq,
+                      column: 'ride_request_id',
+                      value: _activeRequestId,
+                    ),
+                    callback: (payload) {
+                      if (mounted) {
+                        _loadDriverOffer(payload.newRecord['id']);
+                      }
+                    },
+                  )
+                  .subscribe()
+              as StreamSubscription?;
+    } catch (e) {
+      print('Error subscribing to driver offers: $e');
+    }
   }
 
   Future<void> _loadDriverOffer(String offerId) async {
@@ -259,9 +262,11 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
           .eq('id', offerId)
           .single();
 
-      setState(() {
-        _driverOffers.add(response);
-      });
+      if (mounted) {
+        setState(() {
+          _driverOffers.add(response);
+        });
+      }
 
       // Show offer bottom sheet
       _showDriverOfferSheet(response);
@@ -293,9 +298,10 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
   Future<void> _acceptOffer(String offerId) async {
     try {
       // Accept the offer and create trip
-      await Supabase.instance.client.rpc('accept_ride_offer', params: {
-        'p_offer_id': offerId,
-      });
+      await Supabase.instance.client.rpc(
+        'accept_ride_offer',
+        params: {'p_offer_id': offerId},
+      );
 
       CustomToast.showSuccess(
         context: context,
@@ -343,7 +349,9 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
           // Full screen map
           GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: _pickupLatLng ?? const LatLng(-4.3217, 15.3125), // Kinshasa default
+              target:
+                  _pickupLatLng ??
+                  const LatLng(-4.3217, 15.3125), // Kinshasa default
               zoom: 15,
             ),
             onMapCreated: (controller) {
@@ -546,10 +554,7 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
                     const SizedBox(height: 8),
                     Text(
                       'Your offer',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 20),
 
@@ -612,10 +617,7 @@ class _InDriverStyleBookRideState extends State<InDriverStyleBookRide> {
                     const SizedBox(height: 8),
                     Text(
                       'Waiting for offers...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 20),
                     TextButton(
@@ -671,21 +673,29 @@ class _WhereToSearchSheetState extends State<_WhereToSearchSheet> {
 
   Future<void> _searchLocation(String query) async {
     if (query.isEmpty) {
-      setState(() => _suggestions = []);
+      if (mounted) {
+        setState(() => _suggestions = []);
+      }
       return;
     }
 
-    setState(() => _isSearching = true);
+    if (mounted) {
+      setState(() => _isSearching = true);
+    }
 
     try {
       final results = await LocationService.searchPlaces(query);
-      setState(() {
-        _suggestions = results;
-        _isSearching = false;
-      });
+      if (mounted) {
+        setState(() {
+          _suggestions = results;
+          _isSearching = false;
+        });
+      }
     } catch (e) {
       print('Search error: $e');
-      setState(() => _isSearching = false);
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
     }
   }
 
@@ -724,7 +734,9 @@ class _WhereToSearchSheetState extends State<_WhereToSearchSheet> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() => _suggestions = []);
+                          if (mounted) {
+                            setState(() => _suggestions = []);
+                          }
                         },
                       )
                     : null,
@@ -849,10 +861,7 @@ class _DriverOfferSheet extends StatelessWidget {
               ),
               Text(
                 '${distance.toStringAsFixed(1)} km',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
             ],
           ),
@@ -868,10 +877,7 @@ class _DriverOfferSheet extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  'Offer: ',
-                  style: TextStyle(fontSize: 16),
-                ),
+                const Text('Offer: ', style: TextStyle(fontSize: 16)),
                 Text(
                   '\$${offerPrice.toStringAsFixed(0)}',
                   style: const TextStyle(

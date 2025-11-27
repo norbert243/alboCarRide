@@ -24,22 +24,37 @@ class RideMatchingService {
   /// Start listening for new ride requests and match with nearby drivers
   Future<void> startMatchingService() async {
     try {
-      // Subscribe to new ride requests
+      // Cancel existing subscription if any
+      await _rideRequestSubscription?.cancel();
+
+      // Subscribe to new ride requests with error handling
       _rideRequestSubscription = _supabase
           .from('ride_requests')
           .stream(primaryKey: ['id'])
-          .listen((event) async {
-            for (final request in event) {
-              if (request['status'] == 'pending') {
-                await _handleNewRideRequest(request);
+          .listen(
+            (event) async {
+              for (final request in event) {
+                if (request['status'] == 'pending') {
+                  await _handleNewRideRequest(request);
+                }
               }
-            }
-          });
+            },
+            onError: (error) {
+              print('Ride request subscription error: $error');
+              // Attempt to restart the service after a delay
+              Future.delayed(const Duration(seconds: 5), () {
+                if (_rideRequestSubscription?.isPaused == true) {
+                  startMatchingService();
+                }
+              });
+            },
+            cancelOnError: false,
+          );
 
       print('Ride matching service started');
     } catch (e) {
       print('Error starting matching service: $e');
-      rethrow;
+      // Don't rethrow to prevent app crash, just log the error
     }
   }
 
@@ -71,7 +86,7 @@ class RideMatchingService {
       // Use coordinates from the request if available, otherwise geocode
       double finalPickupLat;
       double finalPickupLng;
-      
+
       if (pickupLat != null && pickupLng != null) {
         finalPickupLat = pickupLat;
         finalPickupLng = pickupLng;
@@ -88,7 +103,10 @@ class RideMatchingService {
       }
 
       // Find nearby online drivers
-      final nearbyDrivers = await _findNearbyDrivers(finalPickupLat, finalPickupLng);
+      final nearbyDrivers = await _findNearbyDrivers(
+        finalPickupLat,
+        finalPickupLng,
+      );
 
       if (nearbyDrivers.isEmpty) {
         print('No nearby drivers found for request $requestId');

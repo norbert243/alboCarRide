@@ -12,7 +12,7 @@ import 'widgets/sos_button.dart';
 /// Temporary testing page to access new features
 /// Add this to your app temporarily to test new features
 class TestNewFeaturesPage extends StatelessWidget {
-  const TestNewFeaturesPage({Key? key}) : super(key: key);
+  const TestNewFeaturesPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -74,11 +74,7 @@ class TestNewFeaturesPage extends StatelessWidget {
                               style: TextStyle(fontSize: 18),
                             ),
                             const SizedBox(height: 30),
-                            SosButton(
-                              userRole: 'customer',
-                              tripId: null,
-                              size: 80,
-                            ),
+                            SosButton(tripId: null, isDriver: false),
                           ],
                         ),
                       ),
@@ -113,9 +109,7 @@ class TestNewFeaturesPage extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SavedAddressesPage(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const SavedAddressesPage()),
                 );
               },
             ),
@@ -149,7 +143,10 @@ class TestNewFeaturesPage extends StatelessWidget {
           // Mobile Money Setup
           Card(
             child: ListTile(
-              leading: const Icon(Icons.account_balance_wallet, color: Colors.green),
+              leading: const Icon(
+                Icons.account_balance_wallet,
+                color: Colors.green,
+              ),
               title: const Text('Mobile Money Accounts'),
               subtitle: const Text('M-Pesa, Orange, Airtel'),
               trailing: const Icon(Icons.arrow_forward),
@@ -233,10 +230,7 @@ class TestNewFeaturesPage extends StatelessWidget {
               children: const [
                 Text(
                   '📋 TESTING INSTRUCTIONS',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 SizedBox(height: 8),
                 Text(
@@ -326,9 +320,7 @@ class TestNewFeaturesPage extends StatelessWidget {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Database Test Results'),
-          content: SingleChildScrollView(
-            child: Text(results.join('\n')),
-          ),
+          content: SingleChildScrollView(child: Text(results.join('\n'))),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -366,7 +358,7 @@ class TestNewFeaturesPage extends StatelessWidget {
       // Test MobileMoneyService
       try {
         final mobileMoneyService = MobileMoneyService(supabase);
-        await mobileMoneyService.getDriverMobileMoneyAccounts(userId);
+        await mobileMoneyService.getDriverAccounts(userId);
         results.add('✅ MobileMoneyService');
       } catch (e) {
         results.add('❌ MobileMoneyService: $e');
@@ -385,9 +377,7 @@ class TestNewFeaturesPage extends StatelessWidget {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Service Test Results'),
-          content: SingleChildScrollView(
-            child: Text(results.join('\n\n')),
-          ),
+          content: SingleChildScrollView(child: Text(results.join('\n\n'))),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -401,7 +391,11 @@ class TestNewFeaturesPage extends StatelessWidget {
     }
   }
 
-  void _showMessage(BuildContext context, String message, {bool isError = false}) {
+  void _showMessage(
+    BuildContext context,
+    String message, {
+    bool isError = false,
+  }) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),

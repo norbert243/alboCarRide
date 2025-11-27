@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform;
+import 'package:geolocator/geolocator.dart';
 import 'firebase_options.dart';
 import 'package:albocarride/screens/auth/auth_wrapper.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
@@ -12,10 +13,8 @@ import 'package:albocarride/screens/auth/signup_page.dart';
 import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
-import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/customer_main_navigation.dart';
 import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
-import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/indrive_book_ride_complete.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
@@ -25,6 +24,7 @@ import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/screens/debug/session_debug_page.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/services/ride_matching_service.dart';
+import 'package:albocarride/services/location_permission_service.dart';
 
 // Background message handler (must be a top-level function)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -70,7 +70,48 @@ Future<void> main() async {
     print('main: Error starting RideMatchingService: $e');
   }
 
+  // Request location permissions on app startup (especially important for iOS)
+  await _requestLocationPermissions();
+
   runApp(const MyApp());
+}
+
+Future<void> _requestLocationPermissions() async {
+  try {
+    print('Requesting location permissions on app startup...');
+
+    // Check if location services are enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('Location services are disabled on startup');
+      return;
+    }
+
+    // Check current permission status
+    LocationPermission permission = await Geolocator.checkPermission();
+    print('Current location permission status: $permission');
+
+    // If permission is denied or not determined, request it
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever ||
+        permission == LocationPermission.unableToDetermine) {
+      print('Requesting location permission...');
+      permission = await Geolocator.requestPermission();
+      print('Location permission request result: $permission');
+
+      if (permission == LocationPermission.denied) {
+        print('Location permission denied by user');
+      } else if (permission == LocationPermission.deniedForever) {
+        print('Location permission permanently denied');
+      } else {
+        print('Location permission granted: $permission');
+      }
+    } else {
+      print('Location permission already granted: $permission');
+    }
+  } catch (e) {
+    print('Error requesting location permissions: $e');
+  }
 }
 
 Future<void> _setupFirebaseMessaging() async {

@@ -85,4 +85,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'albo-car-ride.firebasestorage.app',
     measurementId: 'G-ED1KSL8RJT',
   );
+
 }

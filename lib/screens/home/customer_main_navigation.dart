@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:albocarride/screens/home/indrive_book_ride_complete.dart';
+import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/rides_history_page.dart';
 import 'package:albocarride/screens/home/account_page.dart';
 
@@ -24,18 +24,13 @@ class _CustomerMainNavigationState extends State<CustomerMainNavigation> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> _screens = [
-      InDriverBookRideComplete(
-        onNavigateToAccount: () => _navigateToTab(2),
-      ), // Home tab - inDriver booking screen
+      const CustomerHomePage(), // Home tab - map with location
       const RideHistoryPage(), // Rides tab - ride history
       const AccountPage(), // Account tab - profile & settings
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -63,9 +58,7 @@ class _CustomerMainNavigationState extends State<CustomerMainNavigation> {
               unselectedItemColor: const Color(0xFF9E9E9E),
               selectedFontSize: 12,
               unselectedFontSize: 12,
-              selectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w500,
-              ),
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
               unselectedLabelStyle: const TextStyle(
                 fontWeight: FontWeight.w400,
               ),

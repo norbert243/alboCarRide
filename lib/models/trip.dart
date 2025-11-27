@@ -1,4 +1,3 @@
-
 /// Represents a trip created when a driver accepts a ride offer
 class Trip {
   final String id;
@@ -9,6 +8,7 @@ class Trip {
   final DateTime? startTime;
   final DateTime? endTime;
   final double finalPrice;
+  final double? estimatedPrice;
   final String status; // 'scheduled', 'in_progress', 'completed', 'cancelled'
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -23,6 +23,7 @@ class Trip {
     this.startTime,
     this.endTime,
     required this.finalPrice,
+    this.estimatedPrice,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -38,6 +39,7 @@ class Trip {
       requestId: '',
       offerId: '',
       finalPrice: 0.0,
+      estimatedPrice: 0.0,
       status: '',
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -58,6 +60,9 @@ class Trip {
           ? DateTime.parse(map['end_time'] as String)
           : null,
       finalPrice: (map['final_price'] as num).toDouble(),
+      estimatedPrice: map['estimated_price'] != null
+          ? (map['estimated_price'] as num).toDouble()
+          : null,
       status: map['status'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -75,6 +80,7 @@ class Trip {
       'start_time': startTime?.toIso8601String(),
       'end_time': endTime?.toIso8601String(),
       'final_price': finalPrice,
+      'estimated_price': estimatedPrice,
       'status': status,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
@@ -92,6 +98,7 @@ class Trip {
     DateTime? startTime,
     DateTime? endTime,
     double? finalPrice,
+    double? estimatedPrice,
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -106,6 +113,7 @@ class Trip {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       finalPrice: finalPrice ?? this.finalPrice,
+      estimatedPrice: estimatedPrice ?? this.estimatedPrice,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

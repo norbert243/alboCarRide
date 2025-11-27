@@ -77,7 +77,8 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
           builder: (_) => TripPaymentPage(
             tripId: _currentTrip!.id,
             driverId: _currentTrip!.driverId,
-            amount: _currentTrip!.finalPrice ?? _currentTrip!.estimatedPrice,
+            amount:
+                _currentTrip!.finalPrice ?? _currentTrip!.estimatedPrice ?? 0.0,
             commissionRate: 0.10, // 10% commission
           ),
         ),
@@ -410,10 +411,7 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
               ),
             ),
       floatingActionButton: _currentTrip != null
-          ? SosButton(
-              userRole: 'customer',
-              tripId: widget.tripId,
-            )
+          ? SosButton(isDriver: false, tripId: widget.tripId)
           : null,
     );
   }

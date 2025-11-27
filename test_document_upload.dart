@@ -50,7 +50,7 @@ class _DocumentUploadTestPageState extends State<DocumentUploadTestPage> {
       final url = await _uploadService.pickAndUploadDocument(
         source: ImageSource.gallery,
         userId: testUserId,
-        documentType: DocumentType.identityDocument,
+        documentType: DocumentType.driver_license,
       );
 
       setState(() {

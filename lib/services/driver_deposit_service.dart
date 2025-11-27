@@ -22,11 +22,11 @@ class DriverDepositService {
     required XFile proofFile,
   }) async {
     try {
-      // 1) upload proof - using identityDocument type as a workaround
+      // 1) upload proof - using driver_license type as a workaround
       final proofUrl = await uploader.uploadDocument(
         file: proofFile,
         userId: driverId,
-        documentType: DocumentType.identityDocument,
+        documentType: DocumentType.driver_license,
         customFileName:
             'deposit_proof_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );

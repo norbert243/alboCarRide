@@ -17,6 +17,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
   Position? _currentPosition;
   LatLng? _centerPosition;
   bool _isLoadingLocation = true;
+  bool _isEditingLocation = false;
+  String _currentAddress = 'Getting location...';
 
   // Mock nearby drivers (you can load real drivers from database)
   final Set<Marker> _driverMarkers = {};
@@ -44,6 +46,7 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           _currentPosition = position;
           _centerPosition = LatLng(position.latitude, position.longitude);
           _isLoadingLocation = false;
+          _currentAddress = _getAddressFromPosition(position);
         });
 
         _mapController?.animateCamera(
@@ -62,9 +65,74 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
         setState(() {
           _centerPosition = const LatLng(-4.3217, 15.3125); // Kinshasa default
           _isLoadingLocation = false;
+          _currentAddress = 'Location unavailable';
         });
       }
     }
+  }
+
+  String _getAddressFromPosition(Position position) {
+    // This is a simplified version - in production you'd use Google Maps Geocoding API
+    return '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+  }
+
+  void _refreshLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+    });
+    await _getCurrentLocation();
+  }
+
+  void _toggleEditLocation() {
+    setState(() {
+      _isEditingLocation = !_isEditingLocation;
+    });
+  }
+
+  void _updateLocationManually() {
+    // Show dialog to manually enter location
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Location'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Enter your current location',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                // In production, you'd use Google Places API for autocomplete
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Current: $_currentAddress',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // In production, you'd geocode the address and update the map
+              setState(() {
+                _currentAddress = 'New Location (Manual)';
+                _isEditingLocation = false;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _generateMockDrivers(double centerLat, double centerLng) {
@@ -139,9 +207,8 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const InDriverBookRideComplete(
-          showSearchImmediately: true,
-        ),
+        builder: (context) =>
+            const InDriverBookRideComplete(showSearchImmediately: true),
       ),
     );
   }
@@ -171,26 +238,118 @@ class _CustomerHomePageState extends State<CustomerHomePage> {
           // Loading indicator
           if (_isLoadingLocation)
             const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF2196F3),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFF2196F3)),
             ),
 
-          // 2. FLOATING MENU BUTTON (Top-left overlay)
+          // 2. TOP BAR WITH LOCATION AND MENU
           SafeArea(
-            child: Positioned(
-              top: 16,
-              left: 16,
-              child: FloatingActionButton(
-                onPressed: _openMenu,
-                backgroundColor: Colors.white,
-                elevation: 6,
-                child: const Icon(
-                  Icons.menu,
-                  color: Color(0xFF424242),
-                  size: 24,
+            child: Column(
+              children: [
+                // Location Bar
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Location Icon
+                      Icon(
+                        Icons.location_on,
+                        color: Colors.blue[700],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      // Location Text
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Your Location',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _currentAddress,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Refresh Button
+                      IconButton(
+                        onPressed: _refreshLocation,
+                        icon: Icon(
+                          Icons.refresh,
+                          color: Colors.blue[700],
+                          size: 20,
+                        ),
+                        tooltip: 'Refresh Location',
+                      ),
+                      // Edit Button
+                      IconButton(
+                        onPressed: _isEditingLocation
+                            ? _updateLocationManually
+                            : _toggleEditLocation,
+                        icon: Icon(
+                          _isEditingLocation ? Icons.check : Icons.edit,
+                          color: _isEditingLocation
+                              ? Colors.green
+                              : Colors.blue[700],
+                          size: 20,
+                        ),
+                        tooltip: _isEditingLocation
+                            ? 'Save Location'
+                            : 'Edit Location',
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                // Menu Button (Top-right)
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 16, top: 8),
+                    child: FloatingActionButton(
+                      onPressed: _openMenu,
+                      backgroundColor: Colors.white,
+                      elevation: 6,
+                      mini: true,
+                      child: const Icon(
+                        Icons.menu,
+                        color: Color(0xFF424242),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 

@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/location_service.dart';
+import 'package:albocarride/services/location_permission_service.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'dart:async';
@@ -100,10 +101,12 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 
         if (mounted) {
           setState(() {
-            _userName = profileResponse['full_name'] ??
-                       profileResponse['name'] ??
-                       'User';
-            _userRating = (profileResponse['rating'] as num?)?.toDouble() ?? 0.0;
+            _userName =
+                profileResponse['full_name'] ??
+                profileResponse['name'] ??
+                'User';
+            _userRating =
+                (profileResponse['rating'] as num?)?.toDouble() ?? 0.0;
           });
         }
       } catch (e) {
@@ -134,9 +137,18 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      final position =
+          await LocationPermissionService.getCurrentLocationWithPermission(
+            context,
+          );
+
+      if (position == null) {
+        setState(() {
+          _pickupAddress = 'Location permission required';
+          _isLoadingLocation = false;
+        });
+        return;
+      }
 
       setState(() {
         _currentPosition = position;
@@ -172,9 +184,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
     if (_isScreen2 && _pickupLatLng != null && _dropoffLatLng != null) {
       // Screen 2: Fit both markers
       final bounds = _calculateBounds(_pickupLatLng!, _dropoffLatLng!);
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 100),
-      );
+      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
     } else if (_pickupLatLng != null) {
       // Screen 1: Center on pickup
       _mapController!.animateCamera(
@@ -200,19 +210,25 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
     Set<Marker> markers = {};
 
     if (_pickupLatLng != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('pickup'),
-        position: _pickupLatLng!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('pickup'),
+          position: _pickupLatLng!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueGreen,
+          ),
+        ),
+      );
     }
 
     if (_dropoffLatLng != null && _isScreen2) {
-      markers.add(Marker(
-        markerId: const MarkerId('dropoff'),
-        position: _dropoffLatLng!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      ));
+      markers.add(
+        Marker(
+          markerId: const MarkerId('dropoff'),
+          position: _dropoffLatLng!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
     }
 
     setState(() {
@@ -235,7 +251,8 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
         // Get polyline points (you'll need to decode the polyline from directions API)
         // For now, draw a simple line
         setState(() {
-          _distance = (routeInfo['distanceMeters'] ?? 0) / 1000; // Convert to km
+          _distance =
+              (routeInfo['distanceMeters'] ?? 0) / 1000; // Convert to km
           _duration = ((routeInfo['durationSeconds'] ?? 0) / 60).round();
 
           _polylines = {
@@ -273,7 +290,8 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 
   void _increasePrice() {
     setState(() {
-      final current = double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
+      final current =
+          double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
       final newPrice = current + 3;
       _priceController.text = newPrice.toStringAsFixed(0);
     });
@@ -281,7 +299,8 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 
   void _decreasePrice() {
     setState(() {
-      final current = double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
+      final current =
+          double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
       if (current > 3) {
         final newPrice = current - 3;
         _priceController.text = newPrice.toStringAsFixed(0);
@@ -320,7 +339,11 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
     );
   }
 
-  Future<void> _selectDestination(String address, double lat, double lng) async {
+  Future<void> _selectDestination(
+    String address,
+    double lat,
+    double lng,
+  ) async {
     setState(() {
       _dropoffAddress = address;
       _dropoffLatLng = LatLng(lat, lng);
@@ -347,24 +370,25 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
   }
 
   Future<void> _findDriver() async {
-    if (_customerId == null || _pickupLatLng == null || _dropoffLatLng == null) return;
+    if (_customerId == null || _pickupLatLng == null || _dropoffLatLng == null)
+      return;
 
-    final price = double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
+    final price =
+        double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
 
     try {
-      final response = await Supabase.instance.client
-          .from('ride_requests')
-          .insert({
-        'customer_id': _customerId,
-        'pickup_address': _pickupAddress,
-        'pickup_latitude': _pickupLatLng!.latitude,
-        'pickup_longitude': _pickupLatLng!.longitude,
-        'dropoff_address': _dropoffAddress,
-        'dropoff_latitude': _dropoffLatLng!.latitude,
-        'dropoff_longitude': _dropoffLatLng!.longitude,
-        'proposed_price': price,
-        'status': 'pending',
-      }).select();
+      final response =
+          await Supabase.instance.client.from('ride_requests').insert({
+            'customer_id': _customerId,
+            'pickup_address': _pickupAddress,
+            'pickup_latitude': _pickupLatLng!.latitude,
+            'pickup_longitude': _pickupLatLng!.longitude,
+            'dropoff_address': _dropoffAddress,
+            'dropoff_latitude': _dropoffLatLng!.latitude,
+            'dropoff_longitude': _dropoffLatLng!.longitude,
+            'proposed_price': price,
+            'status': 'pending',
+          }).select();
 
       if (response.isNotEmpty) {
         setState(() {
@@ -384,12 +408,15 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
         // Save to recent destinations
         if (_customerId != null) {
           try {
-            await Supabase.instance.client.rpc('upsert_recent_destination', params: {
-              'p_user_id': _customerId!,
-              'p_address': _dropoffAddress,
-              'p_latitude': _dropoffLatLng!.latitude,
-              'p_longitude': _dropoffLatLng!.longitude,
-            });
+            await Supabase.instance.client.rpc(
+              'upsert_recent_destination',
+              params: {
+                'p_user_id': _customerId!,
+                'p_address': _dropoffAddress,
+                'p_latitude': _dropoffLatLng!.latitude,
+                'p_longitude': _dropoffLatLng!.longitude,
+              },
+            );
           } catch (e) {
             print('Error saving recent destination: $e');
           }
@@ -411,32 +438,31 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 
   void _startDriverViewingCounter() {
     // Query REAL driver view count from database
-    _viewingCounterTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (timer) async {
-        if (_activeRequestId == null) {
-          timer.cancel();
-          return;
-        }
+    _viewingCounterTimer = Timer.periodic(const Duration(seconds: 5), (
+      timer,
+    ) async {
+      if (_activeRequestId == null) {
+        timer.cancel();
+        return;
+      }
 
-        try {
-          // Count unique drivers who have viewed this ride request
-          final response = await Supabase.instance.client
-              .from('ride_request_views')
-              .select('driver_id')
-              .eq('ride_request_id', _activeRequestId!);
+      try {
+        // Count unique drivers who have viewed this ride request
+        final response = await Supabase.instance.client
+            .from('ride_request_views')
+            .select('driver_id')
+            .eq('ride_request_id', _activeRequestId!);
 
-          if (mounted) {
-            setState(() {
-              _driversViewing = response.length;
-            });
-          }
-        } catch (e) {
-          print('Error fetching driver view count: $e');
-          // If table doesn't exist yet, keep counter at 0
+        if (mounted) {
+          setState(() {
+            _driversViewing = response.length;
+          });
         }
-      },
-    );
+      } catch (e) {
+        print('Error fetching driver view count: $e');
+        // If table doesn't exist yet, keep counter at 0
+      }
+    });
   }
 
   void _subscribeToDriverOffers() {
@@ -504,8 +530,11 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
   void _showPriceIncreaseDialog() {
     if (!mounted) return;
 
-    final currentPrice = double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
-    final suggestedIncrease = (currentPrice * 0.2).round().toDouble(); // 20% increase
+    final currentPrice =
+        double.tryParse(_priceController.text) ?? _suggestedPrice ?? 0;
+    final suggestedIncrease = (currentPrice * 0.2)
+        .round()
+        .toDouble(); // 20% increase
     final newPrice = currentPrice + suggestedIncrease;
 
     showDialog(
@@ -523,10 +552,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
             const SizedBox(height: 8),
             Text(
               'Suggested increase: +\$${suggestedIncrease.toStringAsFixed(0)}',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
@@ -540,10 +566,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
             const SizedBox(height: 16),
             Text(
               'Increasing your fare can help attract more drivers.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
           ],
         ),
@@ -684,10 +707,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
           color: isSelected ? Colors.green.withOpacity(0.1) : Colors.grey[100],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(
-          icon,
-          color: isSelected ? Colors.green : Colors.grey[600],
-        ),
+        child: Icon(icon, color: isSelected ? Colors.green : Colors.grey[600]),
       ),
       title: Text(
         title,
@@ -824,10 +844,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                 const SizedBox(width: 12),
                 const Text(
                   'Ride',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -886,10 +903,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                       ),
                       Text(
                         'Entrance',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -991,16 +1005,17 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Affordable rides',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ],
                 ),
@@ -1091,10 +1106,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                 Expanded(
                   child: Text(
                     'Automatically accept the nearest driver for your fare',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[800],
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[800]),
                   ),
                 ),
                 Switch(
@@ -1122,8 +1134,8 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                   _selectedPaymentMethod == 'Cash'
                       ? Icons.money
                       : _selectedPaymentMethod == 'Card'
-                          ? Icons.credit_card
-                          : Icons.phone_android,
+                      ? Icons.credit_card
+                      : Icons.phone_android,
                   size: 20,
                   color: Colors.green,
                 ),
@@ -1134,10 +1146,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                     children: [
                       Text(
                         'Payment Method',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -1178,10 +1187,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
                   ),
                   child: const Text(
                     'Find a driver',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -1215,10 +1221,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 20,
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 20),
           ],
         ),
         child: Column(
@@ -1228,18 +1231,12 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
             const SizedBox(height: 16),
             Text(
               '$_driversViewing ${_driversViewing == 1 ? "driver" : "drivers"} viewing your request',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
               'Waiting for offers...',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 20),
             TextButton(
@@ -1269,200 +1266,198 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
             child: Container(
               width: MediaQuery.of(context).size.width * 0.85,
               height: MediaQuery.of(context).size.height,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-              ),
-        child: SafeArea(
-          child: Column(
-          children: [
-            // Profile section
-            Container(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  // Avatar
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: const Color(0xFFF5F5F5),
-                    child: Icon(
-                      Icons.person,
-                      size: 32,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Name and "My account"
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _userName,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            widget.onNavigateToAccount?.call();
-                          },
-                          child: const Text(
-                            'My account',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF00C853), // Green
+              decoration: const BoxDecoration(color: Colors.white),
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // Profile section
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+                          // Avatar
+                          CircleAvatar(
+                            radius: 32,
+                            backgroundColor: const Color(0xFFF5F5F5),
+                            child: Icon(
+                              Icons.person,
+                              size: 32,
+                              color: Colors.grey[600],
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 16),
+                          // Name and "My account"
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _userName,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    widget.onNavigateToAccount?.call();
+                                  },
+                                  child: const Text(
+                                    'My account',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF00C853), // Green
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
 
-            // Rating
-            if (_userRating > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.star,
-                      color: Color(0xFF00C853),
-                      size: 24,
+                    // Rating
+                    if (_userRating > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: Color(0xFF00C853),
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${_userRating.toStringAsFixed(2)} Rating',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    const Divider(height: 1),
+
+                    // Menu items
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        children: [
+                          _buildDrawerMenuItem(
+                            icon: Icons.account_balance_wallet_outlined,
+                            title: 'Payment',
+                            onTap: () {
+                              Navigator.pop(context);
+                              // Navigate to payment
+                            },
+                          ),
+                          _buildDrawerMenuItem(
+                            icon: Icons.calendar_today_outlined,
+                            title: 'My Rides',
+                            onTap: () {
+                              Navigator.pop(context);
+                              // Navigate to rides history
+                            },
+                          ),
+                          _buildDrawerMenuItem(
+                            icon: Icons.shield_outlined,
+                            title: 'Safety',
+                            onTap: () {
+                              Navigator.pop(context);
+                              // Navigate to safety
+                            },
+                          ),
+                          _buildDrawerMenuItem(
+                            icon: Icons.help_outline,
+                            title: 'Support',
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.pushNamed(context, '/support');
+                            },
+                          ),
+                          _buildDrawerMenuItem(
+                            icon: Icons.info_outline,
+                            title: 'About',
+                            onTap: () {
+                              Navigator.pop(context);
+                              // Navigate to about
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_userRating.toStringAsFixed(2)} Rating',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+
+                    // Become a driver banner
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE0F2F1), // Light green
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Stack(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Become a driver',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Earn money on your schedule',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Icon(
+                                Icons.close,
+                                size: 20,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-
-            const Divider(height: 1),
-
-            // Menu items
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                children: [
-                  _buildDrawerMenuItem(
-                    icon: Icons.account_balance_wallet_outlined,
-                    title: 'Payment',
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to payment
-                    },
-                  ),
-                  _buildDrawerMenuItem(
-                    icon: Icons.calendar_today_outlined,
-                    title: 'My Rides',
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to rides history
-                    },
-                  ),
-                  _buildDrawerMenuItem(
-                    icon: Icons.shield_outlined,
-                    title: 'Safety',
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to safety
-                    },
-                  ),
-                  _buildDrawerMenuItem(
-                    icon: Icons.help_outline,
-                    title: 'Support',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, '/support');
-                    },
-                  ),
-                  _buildDrawerMenuItem(
-                    icon: Icons.info_outline,
-                    title: 'About',
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to about
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // Become a driver banner
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE0F2F1), // Light green
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Stack(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Become a driver',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Earn money on your schedule',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                    ],
-                  ),
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                      child: Icon(
-                        Icons.close,
-                        size: 20,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-          ),
             ),
           ),
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(-1, 0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeInOut,
-          )),
+          position: Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+              ),
           child: child,
         );
       },
@@ -1478,10 +1473,7 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
       leading: Icon(icon, size: 24, color: Colors.black87),
       title: Text(
         title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w400,
-        ),
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w400),
       ),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
@@ -1496,6 +1488,9 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
       builder: (context) => _DestinationSearchSheet(
         recentAddresses: _recentAddresses,
         onSelectDestination: _selectDestination,
+        currentLocationAddress: _pickupAddress,
+        currentLatitude: _pickupLatLng?.latitude,
+        currentLongitude: _pickupLatLng?.longitude,
       ),
     );
   }
@@ -1505,10 +1500,16 @@ class _InDriverBookRideCompleteState extends State<InDriverBookRideComplete> {
 class _DestinationSearchSheet extends StatefulWidget {
   final List<Map<String, dynamic>> recentAddresses;
   final Function(String, double, double) onSelectDestination;
+  final String currentLocationAddress;
+  final double? currentLatitude;
+  final double? currentLongitude;
 
   const _DestinationSearchSheet({
     required this.recentAddresses,
     required this.onSelectDestination,
+    required this.currentLocationAddress,
+    this.currentLatitude,
+    this.currentLongitude,
   });
 
   @override
@@ -1521,11 +1522,29 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
   List<Map<String, dynamic>> _searchResults = [];
   List<Map<String, dynamic>> _savedPlaces = [];
   bool _isSearching = false;
+  Position? _currentPosition;
 
   @override
   void initState() {
     super.initState();
     _loadSavedPlaces();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final position =
+          await LocationPermissionService.getCurrentLocationWithPermission(
+            context,
+          );
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+        });
+      }
+    } catch (e) {
+      print('Error getting current location: $e');
+    }
   }
 
   Future<void> _loadSavedPlaces() async {
@@ -1557,47 +1576,71 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
 
   Future<void> _performSearch(String query) async {
     if (query.isEmpty) {
-      setState(() => _searchResults = []);
+      if (mounted) {
+        setState(() => _searchResults = []);
+      }
       return;
     }
 
-    setState(() => _isSearching = true);
+    if (mounted) {
+      setState(() => _isSearching = true);
+    }
 
     try {
       // Search saved places by name
-      final matchingSavedPlaces = _savedPlaces.where((place) {
-        final name = place['name']?.toString().toLowerCase() ?? '';
-        final address = place['address']?.toString().toLowerCase() ?? '';
-        final queryLower = query.toLowerCase();
-        return name.contains(queryLower) || address.contains(queryLower);
-      }).map((place) => {
-        'description': '${place['name']} - ${place['address']}',
-        'place_id': 'saved_${place['id']}',
-        'is_saved_place': true,
-        'latitude': place['latitude'],
-        'longitude': place['longitude'],
-        'name': place['name'],
-        'icon': place['icon'],
-      }).toList();
+      final matchingSavedPlaces = _savedPlaces
+          .where((place) {
+            final name = place['name']?.toString().toLowerCase() ?? '';
+            final address = place['address']?.toString().toLowerCase() ?? '';
+            final queryLower = query.toLowerCase();
+            return name.contains(queryLower) || address.contains(queryLower);
+          })
+          .map(
+            (place) => {
+              'description': '${place['name']} - ${place['address']}',
+              'place_id': 'saved_${place['id']}',
+              'is_saved_place': true,
+              'latitude': place['latitude'],
+              'longitude': place['longitude'],
+              'name': place['name'],
+              'icon': place['icon'],
+            },
+          )
+          .toList();
 
       // Search online places
       final onlineResults = await LocationService.searchPlaces(query);
 
-      setState(() {
-        // Combine saved places and online results (saved places first)
-        _searchResults = [...matchingSavedPlaces, ...onlineResults];
-        _isSearching = false;
-      });
+      if (mounted) {
+        setState(() {
+          // Combine saved places and online results (saved places first)
+          _searchResults = [...matchingSavedPlaces, ...onlineResults];
+          _isSearching = false;
+        });
+      }
     } catch (e) {
       print('Search error: $e');
-      setState(() => _isSearching = false);
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  void _useCurrentLocation() {
+    if (_currentPosition != null) {
+      widget.onSelectDestination(
+        widget.currentLocationAddress,
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+      Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.6, // Reduced height
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1629,7 +1672,9 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() => _searchResults = []);
+                          if (mounted) {
+                            setState(() => _searchResults = []);
+                          }
                         },
                       )
                     : null,
@@ -1640,6 +1685,85 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
               onChanged: _performSearch,
             ),
           ),
+
+          // Current Location Section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Current Location',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: _useCurrentLocation,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.my_location,
+                            size: 18,
+                            color: Colors.green,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Use Current Location',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.currentLocationAddress,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey[500],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
 
           // Results
           Expanded(

@@ -28,9 +28,7 @@ class _MyRideRequestsPageState extends State<MyRideRequestsPage> {
 
   @override
   void dispose() {
-    if (_offersSubscription != null) {
-      _supabase.removeChannel(_offersSubscription as RealtimeChannel);
-    }
+    _offersSubscription?.cancel();
     super.dispose();
   }
 
