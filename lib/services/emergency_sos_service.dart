@@ -377,25 +377,18 @@ class EmergencySosService {
   }
 
   /// Notify emergency contact via SMS/WhatsApp
+  /// Matches blueprint2 specification for Passenger SOS message format
   Future<void> _notifyEmergencyContact({
     required EmergencyContact contact,
     required Position location,
     required String incidentId,
   }) async {
-    final googleMapsLink =
+    // Generate Google Maps live location link
+    final liveLocationLink =
         'https://www.google.com/maps?q=${location.latitude},${location.longitude}';
 
-    final message = '''🚨 EMERGENCY ALERT 🚨
-
-${contact.name}, this is an automated emergency alert from AlboCarRide.
-
-A passenger has triggered an SOS alert at:
-📍 Location: $googleMapsLink
-
-Please check on them immediately or contact local authorities.
-
-Alert ID: $incidentId
-Time: ${DateTime.now().toString()}''';
+    // Blueprint2 specified message format
+    final message = 'URGENT SOS! I am in distress and need help. My live location is: $liveLocationLink';
 
     // Send via WhatsApp if enabled
     if (contact.notifyViaWhatsapp) {
@@ -479,28 +472,54 @@ Time: ${DateTime.now().toString()}''';
   }
 
   /// Send SOS notification to driver via push notification
+  /// Matches blueprint2 specification for Driver SOS notification format
   Future<void> _sendDriverSosNotification({
     required String driverId,
     required Position sosLocation,
     required String incidentId,
   }) async {
     try {
-      // Create notification record
+      // Generate live location link for the SOS driver
+      final liveLocationLink =
+          'https://www.google.com/maps?q=${sosLocation.latitude},${sosLocation.longitude}';
+
+      // Blueprint2 specified notification content
+      final notificationBody =
+          '🚨 URGENT: Driver SOS! Immediate assistance requested at location $liveLocationLink';
+
+      // Create notification record in database
       await _supabase.from('notifications').insert({
         'user_id': driverId,
         'title': '🚨 DRIVER SOS ALERT',
-        'body':
-            'A fellow driver needs help nearby! Tap to view location and assist.',
+        'body': notificationBody,
         'type': 'driver_sos',
         'data': jsonEncode({
           'incident_id': incidentId,
           'latitude': sosLocation.latitude,
           'longitude': sosLocation.longitude,
+          'location_link': liveLocationLink,
         }),
       });
 
       // TODO: Trigger actual push notification via FCM
-      // This would be handled by your notification service
+      // FCM Payload structure (for backend implementation):
+      // {
+      //   "notification": {
+      //     "title": "🚨 DRIVER SOS ALERT",
+      //     "body": notificationBody
+      //   },
+      //   "data": {
+      //     "type": "driver_sos",
+      //     "incident_id": incidentId,
+      //     "latitude": sosLocation.latitude,
+      //     "longitude": sosLocation.longitude,
+      //     "location_link": liveLocationLink
+      //   },
+      //   "priority": "high",
+      //   "android": {
+      //     "priority": "high"
+      //   }
+      // }
     } catch (e) {
       print('Failed to send driver SOS notification: $e');
     }

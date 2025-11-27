@@ -6,6 +6,8 @@ import 'package:albocarride/services/location_service.dart';
 import 'package:albocarride/services/location_permission_service.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/utils/place_icon_helper.dart';
+import 'package:albocarride/screens/home/safety_page.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -1521,50 +1523,52 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   List<Map<String, dynamic>> _savedPlaces = [];
+  List<Map<String, dynamic>> _recentDestinations = [];
   bool _isSearching = false;
-  Position? _currentPosition;
+  bool _isLoadingSuggestions = true;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedPlaces();
-    _getCurrentLocation();
+    _loadSuggestionsData();
   }
 
-  Future<void> _getCurrentLocation() async {
-    try {
-      final position =
-          await LocationPermissionService.getCurrentLocationWithPermission(
-            context,
-          );
-      if (mounted) {
-        setState(() {
-          _currentPosition = position;
-        });
-      }
-    } catch (e) {
-      print('Error getting current location: $e');
-    }
-  }
-
-  Future<void> _loadSavedPlaces() async {
+  Future<void> _loadSuggestionsData() async {
     try {
       final userId = await SessionService.getUserIdStatic();
       if (userId != null) {
-        final response = await Supabase.instance.client
+        // Load saved places
+        final savedPlacesResponse = await Supabase.instance.client
             .from('saved_places')
             .select()
             .eq('user_id', userId)
             .order('created_at', ascending: false);
 
+        // Load recent destinations (last 5)
+        final recentDestinationsResponse = await Supabase.instance.client
+            .from('recent_destinations')
+            .select()
+            .eq('user_id', userId)
+            .order('last_used_at', ascending: false)
+            .limit(5);
+
         if (mounted) {
           setState(() {
-            _savedPlaces = List<Map<String, dynamic>>.from(response);
+            _savedPlaces = List<Map<String, dynamic>>.from(savedPlacesResponse);
+            _recentDestinations = List<Map<String, dynamic>>.from(
+              recentDestinationsResponse,
+            );
+            _isLoadingSuggestions = false;
           });
         }
       }
     } catch (e) {
-      print('Error loading saved places: $e');
+      print('Error loading suggestions: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSuggestions = false;
+        });
+      }
     }
   }
 
@@ -1627,11 +1631,11 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
   }
 
   void _useCurrentLocation() {
-    if (_currentPosition != null) {
+    if (widget.currentLatitude != null && widget.currentLongitude != null) {
       widget.onSelectDestination(
         widget.currentLocationAddress,
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
+        widget.currentLatitude!,
+        widget.currentLongitude!,
       );
       Navigator.pop(context);
     }
@@ -1767,39 +1771,216 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
 
           // Results
           Expanded(
-            child: _isSearching
+            child: _isSearching || _isLoadingSuggestions
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    itemCount: _searchResults.isEmpty
-                        ? widget.recentAddresses.length
-                        : _searchResults.length,
-                    itemBuilder: (context, index) {
-                      final isRecent = _searchResults.isEmpty;
-                      final item = isRecent
-                          ? widget.recentAddresses[index]
-                          : _searchResults[index];
-
-                      return ListTile(
-                        leading: Icon(
-                          isRecent ? Icons.access_time : Icons.location_on,
-                          color: Colors.grey[600],
-                        ),
-                        title: Text(item['address'] ?? item['name'] ?? ''),
-                        subtitle: isRecent ? null : Text(item['address'] ?? ''),
-                        onTap: () {
-                          widget.onSelectDestination(
-                            item['address'] ?? item['name'] ?? '',
-                            item['latitude'],
-                            item['longitude'],
-                          );
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
+                : _searchResults.isEmpty
+                ? _buildDefaultSuggestions()
+                : _buildSearchResults(),
           ),
         ],
       ),
+    );
+  }
+
+  // Build default suggestions when search is empty
+  Widget _buildDefaultSuggestions() {
+    return ListView(
+      children: [
+        // Saved Places Section
+        if (_savedPlaces.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Text(
+              'SAVED PLACES',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          ..._savedPlaces.map((place) => _buildSavedPlaceItem(place)),
+          const SizedBox(height: 8),
+        ],
+
+        // Recent Destinations Section
+        if (_recentDestinations.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Text(
+              'RECENT',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[600],
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          ..._recentDestinations.map(
+            (destination) => _buildRecentDestinationItem(destination),
+          ),
+        ],
+
+        // Empty state if no suggestions
+        if (_savedPlaces.isEmpty && _recentDestinations.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 64,
+                  color: Colors.grey[300],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No saved places or recent destinations yet',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  // Build saved place item
+  Widget _buildSavedPlaceItem(Map<String, dynamic> place) {
+    final iconName = place['icon'] ?? 'place';
+    final iconData = PlaceIconHelper.getIcon(iconName);
+    final name = place['name'] ?? 'Unnamed';
+    final address = place['address'] ?? '';
+
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(iconData, size: 20, color: const Color(0xFF757575)),
+      ),
+      title: Text(
+        name,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+      ),
+      subtitle: Text(
+        address,
+        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: () {
+        widget.onSelectDestination(
+          address,
+          place['latitude'],
+          place['longitude'],
+        );
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  // Build recent destination item
+  Widget _buildRecentDestinationItem(Map<String, dynamic> destination) {
+    final address = destination['address'] ?? 'Unknown location';
+
+    return ListTile(
+      leading: Icon(Icons.access_time, color: Colors.grey[600], size: 24),
+      title: Text(
+        address,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+      ),
+      onTap: () {
+        widget.onSelectDestination(
+          address,
+          destination['latitude'],
+          destination['longitude'],
+        );
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  // Build search results list
+  Widget _buildSearchResults() {
+    return ListView.builder(
+      itemCount: _searchResults.length,
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        final isSavedPlace = result['is_saved_place'] == true;
+
+        if (isSavedPlace) {
+          // Show saved place with icon
+          final iconName = result['icon'] ?? 'place';
+          final iconData = PlaceIconHelper.getIcon(iconName);
+
+          return ListTile(
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(iconData, size: 20, color: const Color(0xFF757575)),
+            ),
+            title: Text(
+              result['name'] ?? '',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              result['description'] ?? '',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            ),
+            onTap: () {
+              widget.onSelectDestination(
+                result['description'] ?? result['name'] ?? '',
+                result['latitude'],
+                result['longitude'],
+              );
+              Navigator.pop(context);
+            },
+          );
+        } else {
+          // Show online search result
+          return ListTile(
+            leading: Icon(Icons.location_on, color: Colors.grey[600], size: 24),
+            title: Text(
+              result['description'] ?? result['name'] ?? '',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            onTap: () async {
+              // For online results, we need to get coordinates
+              final description = result['description'] ?? result['name'] ?? '';
+              if (result['latitude'] != null && result['longitude'] != null) {
+                widget.onSelectDestination(
+                  description,
+                  result['latitude'],
+                  result['longitude'],
+                );
+              } else {
+                // Geocode the address if coordinates not available
+                final coords = await LocationService.geocodeAddress(
+                  description,
+                );
+                if (coords != null && mounted) {
+                  widget.onSelectDestination(
+                    description,
+                    coords['latitude'],
+                    coords['longitude'],
+                  );
+                }
+              }
+              Navigator.pop(context);
+            },
+          );
+        }
+      },
     );
   }
 }

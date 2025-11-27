@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.saved_places (
 
 -- Create index for faster queries by user
 CREATE INDEX IF NOT EXISTS idx_saved_places_user_id
+
   ON public.saved_places(user_id);
 
 -- Create index for location queries

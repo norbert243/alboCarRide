@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/screens/home/add_saved_place_page.dart';
+import 'package:albocarride/screens/home/safety_page.dart';
 import 'package:albocarride/utils/place_icon_helper.dart';
 
 /// Single unified Account screen (Bolt style)
@@ -126,7 +127,12 @@ class _AccountPageState extends State<AccountPage> {
                           icon: Icons.shield_outlined,
                           title: 'Safety',
                           onTap: () {
-                            // Navigate to safety
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const SafetyPage(),
+                              ),
+                            );
                           },
                         ),
                         _buildMenuItem(
