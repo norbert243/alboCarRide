@@ -13,6 +13,7 @@ class Trip {
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? completedAt;
+  final String? notes; // Added notes property
 
   // Added fields from other parts of the app that were missing
   final String? driverName;
@@ -37,6 +38,7 @@ class Trip {
     required this.createdAt,
     this.startedAt,
     this.completedAt,
+    this.notes, // Added to constructor
     this.driverName,
     this.riderName,
     this.driverLocation,
@@ -76,6 +78,7 @@ class Trip {
       createdAt: DateTime.parse(m['created_at'] as String),
       startedAt: m['started_at'] != null ? DateTime.parse(m['started_at'] as String) : null,
       completedAt: m['completed_at'] != null ? DateTime.parse(m['completed_at'] as String) : null,
+      notes: m['notes'] as String?, // Added to fromMap
       driverName: m['driver_name'] as String?,
       riderName: m['rider_name'] as String?,
       driverLocation: driverLocation,
@@ -101,6 +104,7 @@ class Trip {
     'created_at': createdAt.toIso8601String(),
     'started_at': startedAt?.toIso8601String(),
     'completed_at': completedAt?.toIso8601String(),
+    'notes': notes, // Added to toMap
     'driver_name': driverName,
     'rider_name': riderName,
     'driver_lat': driverLocation?.latitude,

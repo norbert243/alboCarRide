@@ -8,6 +8,7 @@ import 'package:albocarride/utils/app_theme.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:albocarride/utils/map_utils.dart';
 import 'package:albocarride/screens/customer_payment_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Added this import
 
 class RiderTripTrackingPage extends StatefulWidget {
   final String tripId;
@@ -119,8 +120,6 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
     );
   }
   
-  import 'package:flutter_dotenv/flutter_dotenv.dart';
-
   void _getPolyline() async {
     if (_currentTrip == null || _currentTrip!.pickupLocation == null || _currentTrip!.dropoffLocation == null) {
       return;

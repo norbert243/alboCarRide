@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+
 /// Service for matching ride requests with nearby drivers
 class RideMatchingService {
   static final RideMatchingService _instance = RideMatchingService._internal();
@@ -279,12 +280,6 @@ class RideMatchingService {
     final random = DateTime.now().microsecondsSinceEpoch;
     return '${random}_${DateTime.now().millisecondsSinceEpoch}';
   }
-
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-// ... existing code ...
 
   /// Notify driver about new ride offer
   Future<void> _notifyDriver(

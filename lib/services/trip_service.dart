@@ -178,7 +178,7 @@ class TripService {
                 ),
                 profiles!trips_rider_id_fkey(full_name)
               ''')
-              .in_('id', tripIds);
+              .filter('id', 'in', tripIds);
 
           return response.map((trip) {
             final riderProfile = trip['profiles'] as Map<String, dynamic>?;

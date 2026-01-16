@@ -23,6 +23,8 @@ import 'package:albocarride/screens/home/driver_trip_management_page.dart';
 import 'package:albocarride/screens/home/rider_trip_tracking_page.dart';
 import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/utils/app_theme.dart';
+import 'package:albocarride/screens/driver/payment_details_page.dart';
+import 'package:albocarride/screens/customer_payment_page.dart';
 
 // Background message handler (must be a top-level function)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -35,28 +37,46 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from assets
-  await dotenv.load();
+    // Load environment variables from assets
+    await dotenv.load();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    // Initialize Firebase
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL']!,
+      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    );
 
-  // Set up Firebase Messaging after Supabase is initialized
-  await _setupFirebaseMessaging();
+    // Set up Firebase Messaging after Supabase is initialized
+    await _setupFirebaseMessaging();
 
-  // Initialize Auth Service for session management
-  print('main: Initializing AuthService...');
-  await AuthService.initialize();
-  print('main: AuthService initialization completed');
+    // Initialize Auth Service for session management
+    print('main: Initializing AuthService...');
+    await AuthService.initialize();
+    print('main: AuthService initialization completed');
 
-  runApp(const MyApp());
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    print('FATAL ERROR during app initialization: $e');
+    print('Stack trace: $stackTrace');
+    // Optionally, show an error dialog or a blank error screen
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text(
+              'Failed to initialize app: $e',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _setupFirebaseMessaging() async {
@@ -132,14 +152,6 @@ void _saveFcmToken(String token) async {
     }
   }
 }
-
-import 'package:albocarride/screens/driver/payment_details_page.dart';
-
-// ... other code
-
-import 'package:albocarride/screens/customer_payment_page.dart';
-
-// ... other code
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

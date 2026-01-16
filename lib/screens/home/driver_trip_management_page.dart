@@ -7,6 +7,7 @@ import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:albocarride/utils/map_utils.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // Moved to top
 
 class DriverTripManagementPage extends StatefulWidget {
   final String tripId;
@@ -138,9 +139,7 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
     );
   }
   
-  import 'package:flutter_dotenv/flutter_dotenv.dart';
-
-void _getPolyline() async {
+  void _getPolyline() async {
     if (_currentTrip == null ||
         _currentTrip!.pickupLocation == null ||
         _currentTrip!.dropoffLocation == null) {
@@ -299,8 +298,8 @@ void _getPolyline() async {
           _buildDetailRow('From', _currentTrip!.pickupAddress),
           _buildDetailRow('To', _currentTrip!.dropoffAddress),
           _buildDetailRow('Status', _currentTrip!.status),
-          if (_currentTrip!.startTime != null)
-            _buildDetailRow('Started', _currentTrip!.startTime!.toLocal().toString()),
+          if (_currentTrip!.startedAt != null)
+            _buildDetailRow('Started', _currentTrip!.startedAt!.toLocal().toString()), // Changed from startTime
           if (_currentTrip!.endTime != null)
             _buildDetailRow('Ended', _currentTrip!.endTime!.toLocal().toString()),
           if (_currentTrip!.cancellationReason != null)

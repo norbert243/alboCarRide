@@ -26,10 +26,10 @@ class AppTheme {
       bodyMedium: TextStyle(fontSize: 14, color: subtleTextColor),
       labelLarge: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: EdgeInsets.symmetric(vertical: 8),
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: primaryColor,

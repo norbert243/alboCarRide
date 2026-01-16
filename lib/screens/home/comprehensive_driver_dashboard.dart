@@ -342,7 +342,7 @@ class _ComprehensiveDriverDashboardState
       await _supabase
           .from('profiles')
           .update({'is_online': newStatus})
-          .eq('id', _driverId!)
+          .eq('id', _driverId!);
 
       if(mounted) {
         setState(() => _isOnline = newStatus);
@@ -438,7 +438,7 @@ class _ComprehensiveDriverDashboardState
     await _locationService.stopLocationTracking();
     await _matchingService.stopMatchingService();
     await _supabase.auth.signOut();
-    await SessionService.clearSessionStatic();
+    await SessionService.clearSession();
 
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(

@@ -33,10 +33,14 @@ class _CustomerPaymentPageState extends State<CustomerPaymentPage> {
       
       final trip = Trip.fromMap(tripRes);
       
+      if (trip.driverId == null) {
+        throw Exception('Driver ID is missing for this trip.');
+      }
+
       final paymentDetailsRes = await Supabase.instance.client
           .from('driver_payment_details')
           .select()
-          .eq('id', trip.driverId)
+          .eq('id', trip.driverId!)
           .single();
 
       setState(() {
