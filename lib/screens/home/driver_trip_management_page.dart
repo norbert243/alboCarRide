@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
+import 'package:albocarride/utils/app_theme.dart';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:albocarride/utils/map_utils.dart';
 
 class DriverTripManagementPage extends StatefulWidget {
   final String tripId;
@@ -15,42 +19,65 @@ class DriverTripManagementPage extends StatefulWidget {
 }
 
 class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
-  late TripService _tripService;
+  final TripService _tripService = TripService();
   Trip? _currentTrip;
   bool _isLoading = true;
   bool _isUpdating = false;
 
+  GoogleMapController? _mapController;
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
+  PolylinePoints polylinePoints = PolylinePoints();
+  
+  BitmapDescriptor? carMarker;
+  BitmapDescriptor? personMarker;
+
   @override
   void initState() {
     super.initState();
-    _tripService = Provider.of<TripService>(context, listen: false);
+    _loadMarkers();
     _loadTrip();
-    _setupTripSubscription();
+  }
+  
+  Future<void> _loadMarkers() async {
+    carMarker = await getBytesFromAsset('assets/images/car_marker.svg', 100);
+    personMarker = await getBytesFromAsset('assets/images/person_marker.svg', 100);
+    setState(() {});
   }
 
   Future<void> _loadTrip() async {
     try {
-      final trip = await _tripService.getTripWithDetails(widget.tripId);
-      setState(() {
-        _currentTrip = trip;
-        _isLoading = false;
-      });
+      final tripData = await _tripService.getTripById(widget.tripId);
+      if (tripData != null) {
+        if (mounted) {
+          setState(() {
+            _currentTrip = Trip.fromMap(tripData);
+            _isLoading = false;
+          });
+          _setupTripSubscription();
+          _getPolyline();
+        }
+      } else {
+        throw Exception('Trip not found');
+      }
     } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to load trip: $e',
-      );
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        CustomToast.show(
+          context: context,
+          message: 'Failed to load trip: $e',
+        );
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   void _setupTripSubscription() {
-    _tripService.subscribeToTrip(widget.tripId).listen((trip) {
-      if (mounted && trip.id.isNotEmpty) {
+    _tripService.subscribeToTrip(widget.tripId).listen((tripData) {
+      if (mounted && tripData.isNotEmpty) {
         setState(() {
-          _currentTrip = trip;
+          _currentTrip = Trip.fromMap(tripData);
         });
       }
     });
@@ -64,17 +91,20 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
     });
 
     try {
-      await _tripService.updateTripStatus(widget.tripId, newStatus);
-
-      CustomToast.showSuccess(
-        context: context,
-        message: 'Status updated successfully',
-      );
+      await _tripService.updateTripStatus(widget.tripId, newStatus, reason: reason);
+      if (mounted) {
+        CustomToast.show(
+          context: context,
+          message: 'Status updated successfully',
+        );
+      }
     } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Error updating status: $e',
-      );
+      if (mounted) {
+        CustomToast.show(
+          context: context,
+          message: 'Error updating status: $e',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -95,274 +125,235 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
             onPressed: () => Navigator.pop(context),
             child: const Text('No'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
               Navigator.pop(context);
               _updateTripStatus('cancelled', reason: 'Driver cancelled');
             },
-            child: const Text('Yes'),
+            child: const Text('Yes, Cancel'),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildStatusCard() {
-    if (_currentTrip == null) return Container();
-
-    final statusColors = {
-      'scheduled': Colors.orange,
-      'accepted': Colors.blue,
-      'driver_arrived': Colors.purple,
-      'in_progress': Colors.green,
-      'completed': Colors.grey,
-      'cancelled': Colors.red,
-    };
-
-    return Card(
-      margin: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Trip Status',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColors[_currentTrip!.status]?.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: statusColors[_currentTrip!.status] ?? Colors.grey,
-                    ),
-                  ),
-                  child: Text(
-                    _currentTrip!.status.replaceAll('_', ' ').toUpperCase(),
-                    style: TextStyle(
-                      color: statusColors[_currentTrip!.status],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                if ((_currentTrip!.finalPrice ?? 0) > 0)
-                  Text(
-                    '\$${(_currentTrip!.finalPrice ?? 0).toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildTripDetails(),
-          ],
-        ),
-      ),
+  
+  void _getPolyline() async {
+    if (_currentTrip == null || _currentTrip!.pickupLocation == null || _currentTrip!.dropoffLocation == null) {
+      return;
+    }
+    
+    List<LatLng> polylineCoordinates = [];
+    
+    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
+      // TODO: Add your Google Maps API Key here
+      "YOUR_GOOGLE_MAPS_API_KEY",
+      PointLatLng(_currentTrip!.pickupLocation!.latitude, _currentTrip!.pickupLocation!.longitude),
+      PointLatLng(_currentTrip!.dropoffLocation!.latitude, _currentTrip!.dropoffLocation!.longitude),
+      travelMode: TravelMode.driving,
     );
-  }
 
-  Widget _buildTripDetails() {
-    if (_currentTrip == null) return Container();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildDetailRow('Rider ID', _currentTrip!.riderId),
-        const SizedBox(height: 8),
-        _buildDetailRow('Driver ID', _currentTrip!.driverId),
-        const SizedBox(height: 8),
-        if (_currentTrip!.requestId != null) ...[
-          _buildDetailRow('Request ID', _currentTrip!.requestId!),
-          const SizedBox(height: 8),
-        ],
-        if (_currentTrip!.offerId != null) ...[
-          _buildDetailRow('Offer ID', _currentTrip!.offerId!),
-          const SizedBox(height: 8),
-        ],
-        const SizedBox(height: 8),
-        _buildDetailRow('Status', _currentTrip!.status),
-        const SizedBox(height: 8),
-        _buildDetailRow(
-          'Final Price',
-          '\$${(_currentTrip!.finalPrice ?? 0).toStringAsFixed(2)}',
-        ),
-        const SizedBox(height: 8),
-        if (_currentTrip!.startTime != null)
-          _buildDetailRow(
-            'Start Time',
-            _currentTrip!.startTime!.toLocal().toString(),
-          ),
-        if (_currentTrip!.endTime != null) ...[
-          const SizedBox(height: 8),
-          _buildDetailRow(
-            'End Time',
-            _currentTrip!.endTime!.toLocal().toString(),
-          ),
-        ],
-        if (_currentTrip!.cancellationReason != null) ...[
-          const SizedBox(height: 8),
-          _buildDetailRow(
-            'Cancellation Reason',
-            _currentTrip!.cancellationReason!,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            '$label:',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(child: Text(value)),
-      ],
-    );
-  }
-
-  Widget _buildActionButtons() {
-    if (_currentTrip == null || _isUpdating) {
-      return const Center(child: CircularProgressIndicator());
+    if (result.points.isNotEmpty) {
+      for (var point in result.points) {
+        polylineCoordinates.add(LatLng(point.latitude, point.longitude));
+      }
     }
 
-    final status = _currentTrip!.status;
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          if (status == 'accepted') ...[
-            _buildActionButton(
-              'I\'m On My Way',
-              Colors.blue,
-              () => _updateTripStatus('driver_arrived'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (status == 'driver_arrived') ...[
-            _buildActionButton(
-              'Start Trip',
-              Colors.green,
-              () => _updateTripStatus('in_progress'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (status == 'in_progress') ...[
-            _buildActionButton(
-              'Complete Trip',
-              Colors.green,
-              () => _updateTripStatus('completed'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (status != 'completed' && status != 'cancelled') ...[
-            _buildActionButton('Cancel Trip', Colors.red, _showCancelDialog),
-          ],
-          if (status == 'completed' || status == 'cancelled') ...[
-            _buildActionButton(
-              'Back to Home',
-              Colors.blue,
-              () => Navigator.pop(context),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton(String text, Color color, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _isUpdating ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: _isUpdating
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                ),
-              )
-            : Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildMapPlaceholder() {
-    return Container(
-      height: 200,
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.map, size: 48, color: Colors.grey),
-            SizedBox(height: 8),
-            Text('Map View'),
-            Text('(Will integrate with Google Maps API)'),
-          ],
-        ),
-      ),
-    );
+    setState(() {
+      _polylines.add(Polyline(
+        polylineId: const PolylineId('route'),
+        color: AppTheme.primaryColor,
+        width: 5,
+        points: polylineCoordinates,
+      ));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trip Management'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
+      backgroundColor: AppTheme.backgroundColor,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _currentTrip == null
-          ? const Center(child: Text('Trip not found'))
-          : Column(
-              children: [
-                _buildStatusCard(),
-                _buildMapPlaceholder(),
-                const Spacer(),
-                _buildActionButtons(),
-              ],
-            ),
+              ? const Center(child: Text('Trip not found'))
+              : CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      pinned: true,
+                      expandedHeight: 250.0,
+                      backgroundColor: AppTheme.primaryColor,
+                      flexibleSpace: FlexibleSpaceBar(
+                        title: Text('Trip with ${_currentTrip?.riderName ?? 'Rider'}'),
+                        background: _buildMap(),
+                      ),
+                    ),
+                    SliverList(
+                      delegate: SliverChildListDelegate([
+                        _buildStatusCard(),
+                        _buildTripDetails(),
+                        _buildActionButtons(),
+                      ]),
+                    ),
+                  ],
+                ),
+    );
+  }
+  
+  Widget _buildMap() {
+    if(_currentTrip?.pickupLocation == null) {
+      return const Center(child: Text('Location not available'));
+    }
+    
+    final pickup = _currentTrip!.pickupLocation!;
+    
+    _markers.add(Marker(
+      markerId: const MarkerId('pickup'),
+      position: LatLng(pickup.latitude, pickup.longitude),
+      infoWindow: const InfoWindow(title: 'Pickup'),
+      icon: personMarker ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+    ));
+    
+    if(_currentTrip?.dropoffLocation != null) {
+      final dropoff = _currentTrip!.dropoffLocation!;
+       _markers.add(Marker(
+        markerId: const MarkerId('dropoff'),
+        position: LatLng(dropoff.latitude, dropoff.longitude),
+        infoWindow: const InfoWindow(title: 'Dropoff'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ));
+    }
+
+    if(_currentTrip?.driverLocation != null) {
+      final driverLocation = _currentTrip!.driverLocation!;
+      _markers.add(Marker(
+        markerId: const MarkerId('driver'),
+        position: LatLng(driverLocation.latitude, driverLocation.longitude),
+        infoWindow: const InfoWindow(title: 'Driver'),
+        icon: carMarker ?? BitmapDescriptor.defaultMarker,
+      ));
+    }
+
+    return GoogleMap(
+      initialCameraPosition: CameraPosition(
+        target: LatLng(pickup.latitude, pickup.longitude),
+        zoom: 14,
+      ),
+      onMapCreated: (GoogleMapController controller) {
+        _mapController = controller;
+      },
+      markers: _markers,
+      polylines: _polylines,
+    );
+  }
+
+  Widget _buildStatusCard() {
+    if (_currentTrip == null) return const SizedBox.shrink();
+
+    final status = _currentTrip!.status;
+
+    return Card(
+      child: ListTile(
+        leading: Icon(_getStatusIcon(status), color: AppTheme.primaryColor, size: 40),
+        title: Text(
+          status.replaceAll('_', ' ').toUpperCase(),
+          style: AppTheme.theme.textTheme.displayMedium,
+        ),
+        subtitle: const Text('Current trip status'),
+        trailing: Text(
+          'R${(_currentTrip!.finalPrice ?? _currentTrip!.proposedPrice).toStringAsFixed(2)}',
+          style: AppTheme.theme.textTheme.displayMedium?.copyWith(color: Colors.green.shade700),
+        ),
+      ),
+    );
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'scheduled': return Icons.schedule;
+      case 'accepted': return Icons.check_circle_outline;
+      case 'driver_arrived': return Icons.location_on;
+      case 'in_progress': return Icons.directions_car;
+      case 'completed': return Icons.flag;
+      case 'cancelled': return Icons.cancel;
+      default: return Icons.help_outline;
+    }
+  }
+
+  Widget _buildTripDetails() {
+    if (_currentTrip == null) return const SizedBox.shrink();
+
+    return Card(
+      child: ExpansionTile(
+        leading: const Icon(Icons.info_outline),
+        title: const Text('Trip Details'),
+        children: [
+          _buildDetailRow('Rider', _currentTrip!.riderName ?? 'N/A'),
+          _buildDetailRow('From', _currentTrip!.pickupAddress),
+          _buildDetailRow('To', _currentTrip!.dropoffAddress),
+          _buildDetailRow('Status', _currentTrip!.status),
+          if (_currentTrip!.startTime != null)
+            _buildDetailRow('Started', _currentTrip!.startTime!.toLocal().toString()),
+          if (_currentTrip!.endTime != null)
+            _buildDetailRow('Ended', _currentTrip!.endTime!.toLocal().toString()),
+          if (_currentTrip!.cancellationReason != null)
+            _buildDetailRow('Cancellation Reason', _currentTrip!.cancellationReason!),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return ListTile(
+      title: Text(label),
+      subtitle: Text(value, style: AppTheme.theme.textTheme.bodyLarge),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    if (_currentTrip == null || _isUpdating) {
+      return const Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final status = _currentTrip!.status;
+    
+    final actions = <Widget>[];
+
+    if (status == 'accepted') {
+      actions.add(_buildActionButton('I Have Arrived', () => _updateTripStatus('driver_arrived')));
+    }
+    if (status == 'driver_arrived') {
+      actions.add(_buildActionButton('Start Trip', () => _updateTripStatus('in_progress')));
+    }
+    if (status == 'in_progress') {
+      actions.add(_buildActionButton('Complete Trip', () => _updateTripStatus('completed')));
+    }
+    if (status != 'completed' && status != 'cancelled') {
+      actions.add(_buildActionButton('Cancel Trip', _showCancelDialog, isDestructive: true));
+    }
+    if (status == 'completed' || status == 'cancelled') {
+      actions.add(_buildActionButton('Back to Home', () => Navigator.pop(context)));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: actions.map((e) => Padding(padding: const EdgeInsets.only(bottom: 8.0), child: e)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(String text, VoidCallback onPressed, {bool isDestructive = false}) {
+    return ElevatedButton(
+      onPressed: _isUpdating ? null : onPressed,
+      style: isDestructive ? ElevatedButton.styleFrom(backgroundColor: Colors.red) : null,
+      child: _isUpdating
+          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)))
+          : Text(text),
     );
   }
 }

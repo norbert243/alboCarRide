@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:developer';
 import 'db_service.dart';
+import 'notification_service.dart';
 
 /// Service for managing trip lifecycle and operations
 class TripService {
@@ -10,24 +11,7 @@ class TripService {
   /// Start a trip: set status to 'in_progress'
   Future<void> startTrip(String tripId) async {
     try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'in_progress',
-            'start_time': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-
-      // Also update the corresponding ride status for consistency
-      await _client
-          .from('rides')
-          .update({
-            'status': 'in_progress',
-            'started_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
+      await updateTripStatus(tripId, 'in_progress');
     } catch (e) {
       throw Exception('Failed to start trip: $e');
     }
@@ -36,24 +20,7 @@ class TripService {
   /// Complete a trip: set status to 'completed'
   Future<void> completeTrip(String tripId) async {
     try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'completed',
-            'end_time': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-
-      // Also update the corresponding ride status
-      await _client
-          .from('rides')
-          .update({
-            'status': 'completed',
-            'completed_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
+      await updateTripStatus(tripId, 'completed');
     } catch (e) {
       throw Exception('Failed to complete trip: $e');
     }
@@ -62,26 +29,7 @@ class TripService {
   /// Cancel a trip with reason
   Future<void> cancelTrip(String tripId, String reason) async {
     try {
-      await _client
-          .from('trips')
-          .update({
-            'status': 'cancelled',
-            'end_time': DateTime.now().toIso8601String(),
-            'cancellation_reason': reason,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
-
-      // Also update the corresponding ride status
-      await _client
-          .from('rides')
-          .update({
-            'status': 'cancelled',
-            'cancelled_at': DateTime.now().toIso8601String(),
-            'cancellation_reason': reason,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', tripId);
+      await updateTripStatus(tripId, 'cancelled', reason: reason);
     } catch (e) {
       throw Exception('Failed to cancel trip: $e');
     }
@@ -175,6 +123,7 @@ class TripService {
   Future<List<Map<String, dynamic>>> getTripHistory(
     String driverId, {
     int limit = 20,
+    int offset = 0,
   }) async {
     // Security validation: ensure driverId matches authenticated user
     final currentUserId = _client.auth.currentUser?.id;
@@ -197,7 +146,8 @@ class TripService {
           .eq('driver_id', driverId)
           .or('status.eq.completed,status.eq.cancelled')
           .order('created_at', ascending: false)
-          .limit(limit);
+          .limit(limit)
+          .range(offset, offset + limit - 1);
 
       return response.map((trip) {
         final riderProfile = trip['profiles'] as Map<String, dynamic>?;
@@ -288,6 +238,101 @@ class TripService {
     }
   }
 
+  Future<Map<String, dynamic>?> getTripById(String tripId) async {
+    try {
+      final response = await _client
+          .from('trips')
+          .select('''
+            *,
+            ride_requests!inner(
+              rider_id,
+              pickup_address,
+              dropoff_address,
+              proposed_price,
+              notes
+            ),
+            profiles!trips_rider_id_fkey(full_name)
+          ''')
+          .eq('id', tripId)
+          .single();
+
+      // Extract rider name from profiles join
+      final riderProfile = response['profiles'] as Map<String, dynamic>?;
+      final riderName = riderProfile?['full_name'] ?? 'Rider';
+
+      // Extract request details
+      final request = response['ride_requests'] as Map<String, dynamic>?;
+
+      return {
+        ...response,
+        'rider_name': riderName,
+        'pickup_address': request?['pickup_address'] ?? '',
+        'dropoff_address': request?['dropoff_address'] ?? '',
+        'proposed_price': request?['proposed_price'] ?? 0.0,
+        'notes': request?['notes'] ?? '',
+      };
+    } catch (e) {
+      throw Exception('Failed to get trip by ID: $e');
+    }
+  }
+  
+  /// Update trip status and notify customer
+  Future<void> updateTripStatus(String tripId, String status, {String? reason}) async {
+    try {
+      final updates = <String, dynamic>{
+        'status': status,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (status == 'in_progress') {
+        updates['start_time'] = DateTime.now().toIso8601String();
+      } else if (status == 'completed' || status == 'cancelled') {
+        updates['end_time'] = DateTime.now().toIso8601String();
+        if (reason != null) {
+          updates['cancellation_reason'] = reason;
+        }
+      }
+      
+      final trip = await _client.from('trips').update(updates).eq('id', tripId).select().single();
+      
+      // Also update the corresponding ride status
+      final rideUpdates = <String, dynamic>{
+        'status': status,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      if (status == 'in_progress') {
+        rideUpdates['started_at'] = DateTime.now().toIso8601String();
+      } else if (status == 'completed') {
+        rideUpdates['completed_at'] = DateTime.now().toIso8601String();
+      } else if (status == 'cancelled') {
+        rideUpdates['cancelled_at'] = DateTime.now().toIso8601String();
+        if (reason != null) {
+          rideUpdates['cancellation_reason'] = reason;
+        }
+      }
+
+      await _client.from('rides').update(rideUpdates).eq('id', tripId);
+
+      // Notify customer
+      final customerId = trip['rider_id'];
+      final driverId = trip['driver_id'];
+      
+      final driver = await _client.from('profiles').select('full_name').eq('id', driverId).single();
+      final driverName = driver['full_name'];
+
+      await NotificationService.notifyCustomerAboutRideStatus(
+        customerId: customerId,
+        rideId: tripId,
+        status: status,
+        driverName: driverName,
+        fare: trip['final_price']
+      );
+
+    } catch (e) {
+      throw Exception('Failed to update trip status: $e');
+    }
+  }
+
   /// Accept offer using atomic RPC
   Future<String?> acceptOfferAtomic(String offerId, String driverId) async {
     // Security validation: ensure driverId matches authenticated user
@@ -302,8 +347,23 @@ class TripService {
           params: {'p_offer_id': offerId, 'p_driver_id': driverId},
         )
         .maybeSingle();
-    if (res == null) return null;
-    if (res.containsKey('trip_id')) return res['trip_id'].toString();
-    return res.toString();
+        
+    if (res != null && res.containsKey('trip_id')) {
+      final tripId = res['trip_id'].toString();
+      final trip = await getTripById(tripId);
+      
+      if (trip != null) {
+        await NotificationService.notifyCustomerAboutRideStatus(
+          customerId: trip['rider_id'],
+          rideId: tripId,
+          status: 'accepted',
+          driverName: trip['driver_name'],
+          estimatedArrival: '5 minutes', // Placeholder
+        );
+      }
+      return tripId;
+    }
+    
+    return null;
   }
 }

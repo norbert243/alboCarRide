@@ -14,16 +14,15 @@ import 'package:albocarride/screens/auth/vehicle_details_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
-import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
+import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
 import 'package:albocarride/screens/home/book_ride_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
-import 'package:albocarride/screens/trips/driver_live_trip_screen.dart';
-import 'package:albocarride/screens/rides/driver_ride_request_screen.dart';
+import 'package:albocarride/screens/home/driver_trip_management_page.dart';
+import 'package:albocarride/screens/home/rider_trip_tracking_page.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/utils/app_theme.dart';
 
 // Background message handler (must be a top-level function)
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -44,13 +43,13 @@ Future<void> main() async {
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Set up Firebase Messaging
-  await _setupFirebaseMessaging();
-
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // Set up Firebase Messaging after Supabase is initialized
+  await _setupFirebaseMessaging();
 
   // Initialize Auth Service for session management
   print('main: Initializing AuthService...');
@@ -65,7 +64,6 @@ Future<void> _setupFirebaseMessaging() async {
     // Request notification permissions
     final messaging = FirebaseMessaging.instance;
 
-    // Request permission for notifications
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -75,19 +73,16 @@ Future<void> _setupFirebaseMessaging() async {
 
     print('User granted permission: ${settings.authorizationStatus}');
 
-    // Get the device token
-    String? token = await messaging.getToken();
-    print('Firebase Messaging Token: $token');
-
-    // For iOS/macOS, also get APNS token with error handling
-    if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS) {
-      try {
-        String? apnsToken = await messaging.getAPNSToken();
-        print('APNS Token: $apnsToken');
-      } catch (e) {
-        print('APNS token error (this is normal during development): $e');
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // Get the device token
+      String? token = await messaging.getToken();
+      print('Firebase Messaging Token: $token');
+      if (token != null) {
+        _saveFcmToken(token);
       }
+
+      // Listen for token refresh
+      messaging.onTokenRefresh.listen(_saveFcmToken);
     }
 
     // Handle foreground messages
@@ -109,17 +104,42 @@ Future<void> _setupFirebaseMessaging() async {
     ) {
       if (message != null) {
         print('App opened from terminated state with message: ${message.data}');
+        // You can navigate to a specific screen here based on the message data
       }
     });
 
     // Handle when the app is in the background and opened via notification
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       print('App opened from background via notification: ${message.data}');
+      // You can navigate to a specific screen here based on the message data
     });
   } catch (e) {
     print('Error setting up Firebase Messaging: $e');
   }
 }
+
+void _saveFcmToken(String token) async {
+  final userId = Supabase.instance.client.auth.currentUser?.id;
+  if (userId != null) {
+    try {
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'fcm_token': token})
+          .eq('id', userId);
+      print('FCM token saved for user $userId');
+    } catch (e) {
+      print('Error saving FCM token: $e');
+    }
+  }
+}
+
+import 'package:albocarride/screens/driver/payment_details_page.dart';
+
+// ... other code
+
+import 'package:albocarride/screens/customer_payment_page.dart';
+
+// ... other code
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -129,77 +149,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'AlboCarRide',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: Colors.grey[50],
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 1,
-          centerTitle: true,
-          titleTextStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 16,
-            horizontal: 20,
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 2,
-            textStyle: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.deepPurple,
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: Colors.white,
-        ),
-      ),
-      home: const EnhancedDriverHomePage(),
+      theme: AppTheme.theme,
+      home: const AuthWrapper(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
@@ -224,38 +175,24 @@ class MyApp extends StatelessWidget {
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
-        '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
+        '/driver-dashboard': (context) => const ComprehensiveDriverDashboard(),
+        '/payment-details': (context) => const PaymentDetailsPage(),
+        '/customer-payment': (context) {
+          final tripId = ModalRoute.of(context)!.settings.arguments as String;
+          return CustomerPaymentPage(tripId: tripId);
+        },
         '/customer_home': (context) => const CustomerHomePage(),
         '/book-ride': (context) => const BookRidePage(),
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),
-        '/driver-dashboard-v2': (context) {
-          final driverId =
-              ModalRoute.of(context)!.settings.arguments as String? ??
-              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
-          return DriverDashboardV2(driverId: driverId);
+        '/driver-trip-management': (context) {
+          final tripId = ModalRoute.of(context)!.settings.arguments as String;
+          return DriverTripManagementPage(tripId: tripId);
         },
-        '/driver-dashboard-v2-realtime': (context) {
-          // Pass driver id from logged-in profile; for testing you can pass the test id:
-          final driverId =
-              ModalRoute.of(context)?.settings.arguments as String? ??
-              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
-          return DriverDashboardV2Realtime(driverId: driverId);
-        },
-        '/driver-live-trip': (context) {
-          final args =
-              ModalRoute.of(context)?.settings.arguments
-                  as Map<String, dynamic>?;
-          return DriverLiveTripScreen(
-            tripId: args?['tripId'] ?? '',
-            driverId: args?['driverId'] ?? '',
-          );
-        },
-        '/driver-ride-request': (context) {
-          final driverId =
-              ModalRoute.of(context)?.settings.arguments as String? ?? '';
-          return DriverRideRequestScreen(driverId: driverId);
+        '/rider-trip-tracking': (context) {
+          final tripId = ModalRoute.of(context)!.settings.arguments as String;
+          return RiderTripTrackingPage(tripId: tripId);
         },
       },
     );

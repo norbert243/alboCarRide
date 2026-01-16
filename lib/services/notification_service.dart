@@ -31,7 +31,7 @@ class NotificationService {
 
           // Send push notification (simulated)
           await _sendPushNotification(
-            driverId: driverId,
+            userId: driverId,
             title: 'New Ride Request',
             body:
                 'Ride from $pickupLocation to $dropoffLocation - \$${estimatedFare.toStringAsFixed(2)}',
@@ -107,7 +107,7 @@ class NotificationService {
 
       // Send push notification (simulated)
       await _sendPushNotification(
-        driverId: customerId,
+        userId: customerId,
         title: title,
         body: message,
       );
@@ -151,7 +151,7 @@ class NotificationService {
 
       // Send push notification (simulated)
       await _sendPushNotification(
-        driverId: driverId,
+        userId: driverId,
         title: title,
         body: message,
       );
@@ -170,15 +170,20 @@ class NotificationService {
 
   /// Simulated push notification (replace with Firebase Cloud Messaging)
   static Future<void> _sendPushNotification({
-    required String driverId,
+    required String userId,
     required String title,
     required String body,
   }) async {
-    // In a real implementation, use Firebase Cloud Messaging
-    // This is a simulation for demo purposes
-
-    print('Sending push notification to $driverId: $title - $body');
-    await Future.delayed(const Duration(milliseconds: 100));
+    try {
+      await Supabase.instance.client.functions.invoke('send-notification', body: {
+        'user_id': userId,
+        'title': title,
+        'body': body,
+      });
+      print('Push notification sent to $userId: $title - $body');
+    } catch (e) {
+      print('Error sending push notification: $e');
+    }
   }
 
   /// Send SMS notification using Twilio (already implemented)
