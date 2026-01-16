@@ -138,20 +138,27 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
     );
   }
   
-  void _getPolyline() async {
-    if (_currentTrip == null || _currentTrip!.pickupLocation == null || _currentTrip!.dropoffLocation == null) {
+  import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+void _getPolyline() async {
+    if (_currentTrip == null ||
+        _currentTrip!.pickupLocation == null ||
+        _currentTrip!.dropoffLocation == null) {
       return;
     }
-    
+
     List<LatLng> polylineCoordinates = [];
-    
-    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-      // TODO: Add your Google Maps API Key here
-      "YOUR_GOOGLE_MAPS_API_KEY",
-      PointLatLng(_currentTrip!.pickupLocation!.latitude, _currentTrip!.pickupLocation!.longitude),
-      PointLatLng(_currentTrip!.dropoffLocation!.latitude, _currentTrip!.dropoffLocation!.longitude),
-      travelMode: TravelMode.driving,
+
+    PolylineRequest request = PolylineRequest(
+      origin: PointLatLng(_currentTrip!.pickupLocation!.latitude,
+          _currentTrip!.pickupLocation!.longitude),
+      destination: PointLatLng(_currentTrip!.dropoffLocation!.latitude,
+          _currentTrip!.dropoffLocation!.longitude),
+      mode: TravelMode.driving,
     );
+
+    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
+        googleApiKey: dotenv.env['GOOGLE_MAPS_API_KEY']!, request: request);
 
     if (result.points.isNotEmpty) {
       for (var point in result.points) {

@@ -13,6 +13,8 @@ import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:albocarride/services/telemetry_service.dart';
 import '../driver/deposit_upload_page.dart';
+import 'package:intl/intl.dart';
+import 'package:albocarride/screens/driver/payment_details_page.dart';
 
 class ComprehensiveDriverDashboard extends StatefulWidget {
   const ComprehensiveDriverDashboard({super.key});
@@ -340,7 +342,7 @@ class _ComprehensiveDriverDashboardState
       await _supabase
           .from('profiles')
           .update({'is_online': newStatus})
-          .eq('id', _driverId!);
+          .eq('id', _driverId!)
 
       if(mounted) {
         setState(() => _isOnline = newStatus);
@@ -527,9 +529,8 @@ class _ComprehensiveDriverDashboardState
                       ..._buildOnlineToggle(),
                       ..._buildActiveTrip(),
                       if (_isOnline && !_hasActiveTrip) ..._buildOfferBoard(),
-                      ..._buildEarningsSummary(),
+                      ..._buildStatsGrid(),
                       ..._buildWalletSection(),
-                      ..._buildPerformanceMetrics(),
                       ..._buildRecentTrips(),
                       ..._buildRecentPayments(),
                     ],
@@ -655,46 +656,86 @@ class _ComprehensiveDriverDashboardState
     );
   }
 
-  List<Widget> _buildEarningsSummary() {
+  List<Widget> _buildStatsGrid() {
     if (_dashboardData == null) return [const SizedBox.shrink()];
 
-    final balance = (_dashboardData!['balance'] as num?)?.toDouble() ?? 0.0;
     final todayEarnings = (_dashboardData!['today_earnings'] as num?)?.toDouble() ?? 0.0;
     final weeklyEarnings = (_dashboardData!['weekly_earnings'] as num?)?.toDouble() ?? 0.0;
+    final completedTrips = (_dashboardData!['completed_trips'] as num?)?.toInt() ?? 0;
+    final rating = (_dashboardData!['rating'] as num?)?.toDouble() ?? 0.0;
+    final totalRatings = (_dashboardData!['total_ratings'] as num?)?.toInt() ?? 0;
+
+    final currencyFormat = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
 
     return [
-      _buildSectionTitle('Earnings'),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildEarningItem('Current Balance', 'R${balance.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green),
-              _buildEarningItem('Today', 'R${todayEarnings.toStringAsFixed(2)}', Icons.today, Colors.blue),
-              _buildEarningItem('This Week', 'R${weeklyEarnings.toStringAsFixed(2)}', Icons.calendar_today, Colors.purple),
-            ],
+      _buildSectionTitle('Your Stats'),
+      GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildStatCard(
+            'Today\'s Earnings',
+            currencyFormat.format(todayEarnings),
+            Icons.today,
+            Colors.blue,
           ),
-        ),
-      )
+          _buildStatCard(
+            'This Week',
+            currencyFormat.format(weeklyEarnings),
+            Icons.calendar_today,
+            Colors.purple,
+          ),
+          _buildStatCard(
+            'Completed Trips',
+            completedTrips.toString(),
+            Icons.directions_car,
+            Colors.green,
+          ),
+          _buildStatCard(
+            'Your Rating',
+            '${rating.toStringAsFixed(1)} ($totalRatings)',
+            Icons.star,
+            Colors.amber,
+          ),
+        ],
+      ),
     ];
   }
 
-  Widget _buildEarningItem(String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, size: 30, color: color),
-        const SizedBox(height: 8),
-        Text(label, style: AppTheme.theme.textTheme.bodyMedium),
-        const SizedBox(height: 4),
-        Text(value, style: AppTheme.theme.textTheme.displayMedium?.copyWith(fontSize: 18)),
-      ],
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, size: 30, color: color),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: AppTheme.theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: AppTheme.theme.textTheme.displayMedium?.copyWith(fontSize: 18),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
-
-  import 'package:albocarride/screens/driver/payment_details_page.dart';
-
-//... other code
 
   List<Widget> _buildWalletSection() {
     if (_dashboardData == null) return [const SizedBox.shrink()];
@@ -702,16 +743,20 @@ class _ComprehensiveDriverDashboardState
     final walletBalance = (_dashboardData!['wallet_balance'] as num?)?.toDouble() ?? 0.0;
     final totalEarnings = (_dashboardData!['total_earnings'] as num?)?.toDouble() ?? 0.0;
     final pendingWithdrawals = (_dashboardData!['pending_withdrawals'] as num?)?.toDouble() ?? 0.0;
+    final currencyFormat = NumberFormat.currency(locale: 'en_ZA', symbol: 'R');
+
 
     return [
       _buildSectionTitle('Wallet'),
       Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Column(
           children: [
-            _buildWalletItem('Available Balance', 'R${walletBalance.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green),
-            _buildWalletItem('Total Earnings', 'R${totalEarnings.toStringAsFixed(2)}', Icons.attach_money, Colors.blue),
-            _buildWalletItem('Pending Withdrawals', 'R${pendingWithdrawals.toStringAsFixed(2)}', Icons.pending, Colors.orange),
-            const Divider(),
+            _buildWalletItem('Available Balance', currencyFormat.format(walletBalance), Icons.account_balance_wallet, Colors.green),
+            _buildWalletItem('Total Earnings', currencyFormat.format(totalEarnings), Icons.attach_money, Colors.blue),
+            _buildWalletItem('Pending Withdrawals', currencyFormat.format(pendingWithdrawals), Icons.pending, Colors.orange),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.payment),
               title: const Text('Manage Payment Methods'),
@@ -735,32 +780,6 @@ class _ComprehensiveDriverDashboardState
       title: Text(label),
       trailing: Text(value, style: AppTheme.theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
     );
-  }
-
-  List<Widget> _buildPerformanceMetrics() {
-    if (_dashboardData == null) return [const SizedBox.shrink()];
-
-    final completedTrips = (_dashboardData!['completed_trips'] as num?)?.toInt() ?? 0;
-    final rating = (_dashboardData!['rating'] as num?)?.toDouble() ?? 0.0;
-
-    return [
-      _buildSectionTitle('Performance'),
-      Card(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: _buildEarningItem('Completed Trips', '$completedTrips', Icons.directions_car, Colors.blue),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: _buildEarningItem('Rating', rating.toStringAsFixed(1), Icons.star, Colors.amber),
-            ),
-          ],
-        ),
-      ),
-    ];
   }
 
   List<Widget> _buildActiveTrip() {

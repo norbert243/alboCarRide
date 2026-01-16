@@ -92,7 +92,47 @@ class TripService {
         .from('trips')
         .stream(primaryKey: ['id'])
         .eq('id', tripId)
-        .map((events) => events.isNotEmpty ? events.first : {});
+        .map((events) => events.isNotEmpty ? events.first : {})
+        .asyncMap((trip) async {
+      if (trip.isEmpty) {
+        return {};
+      }
+      final response = await _client
+          .from('trips')
+          .select('''
+                *,
+                ride_requests!inner(
+                  rider_id,
+                  pickup_address,
+                  pickup_latitude,
+                  pickup_longitude,
+                  dropoff_address,
+                  dropoff_latitude,
+                  dropoff_longitude,
+                  proposed_price,
+                  notes
+                ),
+                profiles!trips_rider_id_fkey(full_name)
+              ''')
+          .eq('id', trip['id'])
+          .single();
+
+      final riderProfile = response['profiles'] as Map<String, dynamic>?;
+      final request = response['ride_requests'] as Map<String, dynamic>?;
+
+      return {
+        ...response,
+        'rider_name': riderProfile?['full_name'] ?? 'Rider',
+        'pickup_address': request?['pickup_address'] ?? '',
+        'dropoff_address': request?['dropoff_address'] ?? '',
+        'proposed_price': request?['proposed_price'] ?? 0.0,
+        'notes': request?['notes'] ?? '',
+        'pickup_latitude': request?['pickup_latitude'],
+        'pickup_longitude': request?['pickup_longitude'],
+        'dropoff_latitude': request?['dropoff_latitude'],
+        'dropoff_longitude': request?['dropoff_longitude'],
+      };
+    });
   }
 
   /// Subscribe to driver's active trips
@@ -107,15 +147,56 @@ class TripService {
         .from('trips')
         .stream(primaryKey: ['id'])
         .eq('driver_id', driverId)
-        .map((events) {
-          // Filter for active trips manually
-          return events
+        .asyncMap((events) async {
+          final activeEvents = events
               .where(
                 (trip) =>
                     trip['status'] == 'scheduled' ||
                     trip['status'] == 'in_progress',
-              )
-              .toList();
+              ).toList();
+
+          if (activeEvents.isEmpty) {
+            return [];
+          }
+
+          final tripIds = activeEvents.map((e) => e['id'] as String).toList();
+
+          final response = await _client
+              .from('trips')
+              .select('''
+                *,
+                ride_requests!inner(
+                  rider_id,
+                  pickup_address,
+                  pickup_latitude,
+                  pickup_longitude,
+                  dropoff_address,
+                  dropoff_latitude,
+                  dropoff_longitude,
+                  proposed_price,
+                  notes
+                ),
+                profiles!trips_rider_id_fkey(full_name)
+              ''')
+              .in_('id', tripIds);
+
+          return response.map((trip) {
+            final riderProfile = trip['profiles'] as Map<String, dynamic>?;
+            final request = trip['ride_requests'] as Map<String, dynamic>?;
+
+            return {
+              ...trip,
+              'rider_name': riderProfile?['full_name'] ?? 'Rider',
+              'pickup_address': request?['pickup_address'] ?? '',
+              'dropoff_address': request?['dropoff_address'] ?? '',
+              'proposed_price': request?['proposed_price'] ?? 0.0,
+              'notes': request?['notes'] ?? '',
+              'pickup_latitude': request?['pickup_latitude'],
+              'pickup_longitude': request?['pickup_longitude'],
+              'dropoff_latitude': request?['dropoff_latitude'],
+              'dropoff_longitude': request?['dropoff_longitude'],
+            };
+          }).toList();
         });
   }
 

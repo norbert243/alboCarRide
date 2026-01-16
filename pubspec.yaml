@@ -61,6 +61,7 @@ dependencies:
 
   # Polyline points for route drawing
   flutter_polyline_points: ^2.1.0
+  intl: ^0.20.2
 
   # App links for deep linking (Android only) - DISABLED due to cross-drive symlink issues
   # app_links: ^6.4.1
