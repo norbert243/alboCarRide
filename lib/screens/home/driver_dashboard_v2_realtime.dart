@@ -10,7 +10,8 @@ class DriverDashboardV2Realtime extends StatefulWidget {
   const DriverDashboardV2Realtime({super.key, required this.driverId});
 
   @override
-  State<DriverDashboardV2Realtime> createState() => _DriverDashboardV2RealtimeState();
+  State<DriverDashboardV2Realtime> createState() =>
+      _DriverDashboardV2RealtimeState();
 }
 
 class _DriverDashboardV2RealtimeState extends State<DriverDashboardV2Realtime> {
@@ -39,36 +40,76 @@ class _DriverDashboardV2RealtimeState extends State<DriverDashboardV2Realtime> {
   Future<void> _fetchDashboard() async {
     if (mounted) setState(() => loading = true);
     try {
-      final response = await _sb.rpc('get_driver_dashboard', params: {'p_driver_id': widget.driverId});
+      final response = await _sb.rpc(
+        'get_driver_dashboard',
+        params: {'p_driver_id': widget.driverId},
+      );
       Map<String, dynamic>? parsed;
       if (response is Map<String, dynamic>) {
         parsed = response;
-      } else if (response is List && response.isNotEmpty && response.first is Map<String, dynamic>) {
+      } else if (response is List &&
+          response.isNotEmpty &&
+          response.first is Map<String, dynamic>) {
         parsed = Map<String, dynamic>.from(response.first);
       } else if (response != null) {
         parsed = Map<String, dynamic>.from(response);
       }
-      if (mounted) setState(() => dashboardData = parsed);
+
+      // Parse the nested structure from the RPC function
+      if (parsed != null && parsed['status'] == 'success') {
+        final driverInfo = parsed['driver_info'] as Map<String, dynamic>? ?? {};
+        final financials = parsed['financials'] as Map<String, dynamic>? ?? {};
+
+        // Create a flattened structure for backward compatibility
+        final flattenedData = {
+          'driver_id': widget.driverId,
+          'wallet_balance': financials['current_balance'] ?? 0,
+          'rating': driverInfo['rating'] ?? 0.0,
+          'completed_trips': driverInfo['total_trips'] ?? 0,
+          'today_earnings': financials['total_earnings'] ?? 0,
+          'weekly_earnings': 0, // Not available in current function
+          'recent_trips': [],
+        };
+
+        if (mounted) setState(() => dashboardData = flattenedData);
+      } else {
+        // Use fallback if response structure is unexpected
+        if (mounted)
+          setState(() {
+            dashboardData = {
+              'driver_id': widget.driverId,
+              'wallet_balance': 0,
+              'rating': 5.0,
+              'completed_trips': 0,
+              'today_earnings': 0,
+              'weekly_earnings': 0,
+              'recent_trips': [],
+            };
+          });
+      }
     } catch (e, st) {
       debugPrint('Dashboard fetch failed: $e\n$st');
       // Provide fallback data when RPC fails
-      if (mounted) setState(() {
-        dashboardData = {
-          'driver_id': widget.driverId,
-          'wallet_balance': 0,
-          'rating': 5.0,
-          'completed_trips': 0,
-          'today_earnings': 0,
-          'weekly_earnings': 0,
-          'recent_trips': [],
-        };
-      });
+      if (mounted)
+        setState(() {
+          dashboardData = {
+            'driver_id': widget.driverId,
+            'wallet_balance': 0,
+            'rating': 5.0,
+            'completed_trips': 0,
+            'today_earnings': 0,
+            'weekly_earnings': 0,
+            'recent_trips': [],
+          };
+        });
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
-  void _scheduleRefreshDebounced([Duration delay = const Duration(milliseconds: 800)]) {
+  void _scheduleRefreshDebounced([
+    Duration delay = const Duration(milliseconds: 800),
+  ]) {
     // debounce rapid events
     _debounceTimer?.cancel();
     _debounceTimer = Timer(delay, () {
@@ -90,34 +131,34 @@ class _DriverDashboardV2RealtimeState extends State<DriverDashboardV2Realtime> {
 
       // Listen for inserts and updates
       channel
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'driver_state_events',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'driver_id',
-            value: widget.driverId,
-          ),
-          callback: (payload) {
-            debugPrint('Realtime insert: $payload');
-            _scheduleRefreshDebounced();
-          },
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'driver_state_events',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'driver_id',
-            value: widget.driverId,
-          ),
-          callback: (payload) {
-            debugPrint('Realtime update: $payload');
-            _scheduleRefreshDebounced();
-          },
-        );
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'driver_state_events',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'driver_id',
+              value: widget.driverId,
+            ),
+            callback: (payload) {
+              debugPrint('Realtime insert: $payload');
+              _scheduleRefreshDebounced();
+            },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'driver_state_events',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'driver_id',
+              value: widget.driverId,
+            ),
+            callback: (payload) {
+              debugPrint('Realtime update: $payload');
+              _scheduleRefreshDebounced();
+            },
+          );
 
       _subscription = channel.subscribe();
 
@@ -171,135 +212,47 @@ class _DriverDashboardV2RealtimeState extends State<DriverDashboardV2Realtime> {
       _ConnState.unknown: 'Unknown',
       _ConnState.connected: 'Connected',
       _ConnState.disconnected: 'Disconnected',
-      _ConnState.reconnecting: 'Reconnecting'
+      _ConnState.reconnecting: 'Reconnecting',
     }[_connState];
     final connColor = {
       _ConnState.unknown: Colors.grey,
       _ConnState.connected: Colors.green,
       _ConnState.disconnected: Colors.red,
-      _ConnState.reconnecting: Colors.orange
+      _ConnState.reconnecting: Colors.orange,
     }[_connState];
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-        // connection chip
-        Align(
-          alignment: Alignment.topRight,
-          child: Chip(
-            backgroundColor: connColor!.withAlpha(30),
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.wifi, size: 14, color: connColor),
-                const SizedBox(width: 6),
-                Text(connLabel!, style: TextStyle(color: connColor)),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        // existing metrics (use the keys you confirmed)
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Driver ID', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 120,
-              child: Text(
-                d?['driver_id']?.toString() ?? widget.driverId,
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
+          // connection chip
+          Align(
+            alignment: Alignment.topRight,
+            child: Chip(
+              backgroundColor: connColor!.withAlpha(30),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi, size: 14, color: connColor),
+                  const SizedBox(width: 6),
+                  Text(connLabel!, style: TextStyle(color: connColor)),
+                ],
               ),
             ),
           ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Wallet Balance', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 80,
-              child: Text(
-                'R ${d?['wallet_balance'] ?? 0}',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Rating', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 40,
-              child: Text(
-                d?['rating']?.toString() ?? '-',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Completed Trips', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 40,
-              child: Text(
-                d?['completed_trips']?.toString() ?? '0',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Today Earnings', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 80,
-              child: Text(
-                'R ${d?['today_earnings'] ?? 0}',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          child: ListTile(
-            title: const Text('Weekly Earnings', style: TextStyle(fontWeight: FontWeight.bold)),
-            trailing: SizedBox(
-              width: 80,
-              child: Text(
-                'R ${d?['weekly_earnings'] ?? 0}',
-                style: const TextStyle(fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-              ),
-            ),
-          ),
-        ),
-        if (d != null && d['recent_trips'] != null && (d['recent_trips'] as List).isNotEmpty)
+          const SizedBox(height: 8),
+          // existing metrics (use the keys you confirmed)
           Card(
             margin: const EdgeInsets.symmetric(vertical: 6),
             child: ListTile(
-              title: const Text('Recent Trips', style: TextStyle(fontWeight: FontWeight.bold)),
+              title: const Text(
+                'Driver ID',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               trailing: SizedBox(
-                width: 40,
+                width: 120,
                 child: Text(
-                  '${(d['recent_trips'] as List).length}',
+                  d?['driver_id']?.toString() ?? widget.driverId,
                   style: const TextStyle(fontSize: 14),
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
@@ -307,14 +260,125 @@ class _DriverDashboardV2RealtimeState extends State<DriverDashboardV2Realtime> {
               ),
             ),
           ),
-        const SizedBox(height: 8),
-        ElevatedButton.icon(
-          onPressed: () async {
-            _scheduleRefreshDebounced(Duration(milliseconds: 0));
-          },
-          icon: const Icon(Icons.refresh),
-          label: const Text('Force refresh'),
-        ),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: ListTile(
+              title: const Text(
+                'Wallet Balance',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              trailing: SizedBox(
+                width: 80,
+                child: Text(
+                  'R ${d?['wallet_balance'] ?? 0}',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: ListTile(
+              title: const Text(
+                'Rating',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              trailing: SizedBox(
+                width: 40,
+                child: Text(
+                  d?['rating']?.toString() ?? '-',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: ListTile(
+              title: const Text(
+                'Completed Trips',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              trailing: SizedBox(
+                width: 40,
+                child: Text(
+                  d?['completed_trips']?.toString() ?? '0',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: ListTile(
+              title: const Text(
+                'Today Earnings',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              trailing: SizedBox(
+                width: 80,
+                child: Text(
+                  'R ${d?['today_earnings'] ?? 0}',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: ListTile(
+              title: const Text(
+                'Weekly Earnings',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              trailing: SizedBox(
+                width: 80,
+                child: Text(
+                  'R ${d?['weekly_earnings'] ?? 0}',
+                  style: const TextStyle(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                ),
+              ),
+            ),
+          ),
+          if (d != null &&
+              d['recent_trips'] != null &&
+              (d['recent_trips'] as List).isNotEmpty)
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              child: ListTile(
+                title: const Text(
+                  'Recent Trips',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                trailing: SizedBox(
+                  width: 40,
+                  child: Text(
+                    '${(d['recent_trips'] as List).length}',
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: () async {
+              _scheduleRefreshDebounced(Duration(milliseconds: 0));
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Force refresh'),
+          ),
         ],
       ),
     );

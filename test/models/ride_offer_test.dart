@@ -7,6 +7,7 @@ void main() {
       // Arrange
       final offerMap = {
         'id': 'test-offer-123',
+        'ride_request_id': 'ride-request-001',
         'customer_id': 'customer-456',
         'driver_id': 'driver-789',
         'pickup_location': '123 Main Street',
@@ -24,6 +25,7 @@ void main() {
 
       // Assert
       expect(offer.id, 'test-offer-123');
+      expect(offer.rideRequestId, 'ride-request-001');
       expect(offer.customerId, 'customer-456');
       expect(offer.driverId, 'driver-789');
       expect(offer.pickupLocation, '123 Main Street');
@@ -32,14 +34,15 @@ void main() {
       expect(offer.counterPrice, 30.0);
       expect(offer.status, 'pending');
       expect(offer.notes, 'Test ride offer');
-      expect(offer.createdAt, DateTime(2024, 1, 1, 10, 0));
-      expect(offer.updatedAt, DateTime(2024, 1, 1, 10, 5));
+      expect(offer.createdAt, DateTime.parse('2024-01-01T10:00:00.000Z'));
+      expect(offer.updatedAt, DateTime.parse('2024-01-01T10:05:00.000Z'));
     });
 
     test('should handle null optional fields', () {
       // Arrange
       final offerMap = {
         'id': 'test-offer-123',
+        'ride_request_id': 'ride-request-001',
         'customer_id': 'customer-456',
         'driver_id': 'driver-789',
         'pickup_location': '123 Main Street',
@@ -54,6 +57,7 @@ void main() {
 
       // Assert
       expect(offer.id, 'test-offer-123');
+      expect(offer.rideRequestId, 'ride-request-001');
       expect(offer.counterPrice, isNull);
       expect(offer.updatedAt, isNull);
       expect(offer.notes, isNull);
@@ -63,6 +67,7 @@ void main() {
       // Arrange
       final offer = RideOffer(
         id: 'test-offer-123',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-456',
         driverId: 'driver-789',
         pickupLocation: '123 Main Street',
@@ -96,6 +101,7 @@ void main() {
       // Arrange
       final original = RideOffer(
         id: 'original-id',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -130,6 +136,7 @@ void main() {
       // Arrange
       final original = RideOffer(
         id: 'original-id',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -162,6 +169,7 @@ void main() {
       for (final status in statusValues) {
         final offer = RideOffer(
           id: 'test-$status',
+          rideRequestId: 'ride-request-001',
           customerId: 'customer-1',
           driverId: 'driver-1',
           pickupLocation: 'Location A',
@@ -178,6 +186,7 @@ void main() {
     test('should handle price precision correctly', () {
       final offer = RideOffer(
         id: 'test-price',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -193,6 +202,7 @@ void main() {
     test('should handle empty notes', () {
       final offer = RideOffer(
         id: 'test-notes',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -213,6 +223,7 @@ void main() {
 
       final offer = RideOffer(
         id: 'test-long',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: longLocation,
@@ -229,6 +240,7 @@ void main() {
     test('should handle zero price', () {
       final offer = RideOffer(
         id: 'test-zero',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -244,6 +256,7 @@ void main() {
     test('should handle very high price', () {
       final offer = RideOffer(
         id: 'test-high',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -261,6 +274,7 @@ void main() {
 
       final offer = RideOffer(
         id: 'test-future',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',
@@ -278,6 +292,7 @@ void main() {
 
       final offer = RideOffer(
         id: 'test-old',
+        rideRequestId: 'ride-request-001',
         customerId: 'customer-1',
         driverId: 'driver-1',
         pickupLocation: 'Location A',

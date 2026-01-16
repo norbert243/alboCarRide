@@ -147,51 +147,141 @@ class _OfferBoardState extends State<OfferBoard> {
     );
   }
 
+  Future<Map<String, dynamic>?> _getRiderDetails(String customerId) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', customerId)
+          .single();
+      return response;
+    } catch (e) {
+      debugPrint('Error fetching rider details: $e');
+      return null;
+    }
+  }
+
   Widget _buildOfferCard(RideOffer offer) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      elevation: 3,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _getRiderDetails(offer.customerId),
+      builder: (context, snapshot) {
+        final riderDetails = snapshot.data;
+        final riderName = riderDetails?['full_name'] ?? 'Rider';
+        final riderPhone = riderDetails?['phone'] ?? 'Not available';
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          elevation: 3,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '\$${offer.proposedPrice.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                // Header with price and status
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'R${offer.proposedPrice.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    Chip(
+                      label: Text(
+                        offer.status.toUpperCase(),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      backgroundColor: Colors.orange[100],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Rider Details Section
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Rider Details',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.person,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              riderName,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone, size: 16, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              riderPhone,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                Chip(
-                  label: Text(
-                    offer.status.toUpperCase(),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  backgroundColor: Colors.orange[100],
+
+                const SizedBox(height: 12),
+
+                // Trip Details
+                _buildInfoRow(Icons.location_on, 'From:', offer.pickupLocation),
+                _buildInfoRow(Icons.flag, 'To:', offer.destination),
+
+                // Additional Info
+                if (offer.notes != null && offer.notes!.isNotEmpty)
+                  _buildInfoRow(Icons.note, 'Notes:', offer.notes!),
+                _buildInfoRow(
+                  Icons.access_time,
+                  'Requested:',
+                  _formatTimeAgo(offer.createdAt),
                 ),
+
+                const SizedBox(height: 16),
+                if (!_isLoading) _buildActionButtons(offer),
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator()),
               ],
             ),
-            const SizedBox(height: 12),
-            _buildInfoRow(Icons.location_on, 'Pickup:', offer.pickupLocation),
-            _buildInfoRow(Icons.flag, 'Destination:', offer.destination),
-            if (offer.notes != null && offer.notes!.isNotEmpty)
-              _buildInfoRow(Icons.note, 'Notes:', offer.notes!),
-            _buildInfoRow(
-              Icons.access_time,
-              'Received:',
-              _formatTimeAgo(offer.createdAt),
-            ),
-            const SizedBox(height: 16),
-            if (!_isLoading) _buildActionButtons(offer),
-            if (_isLoading) const Center(child: CircularProgressIndicator()),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

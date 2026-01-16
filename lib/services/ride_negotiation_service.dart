@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Represents a ride offer from a customer to a driver
 class RideOffer {
   final String id;
+  final String rideRequestId;
   final String customerId;
   final String driverId;
   final String pickupLocation;
@@ -18,6 +19,7 @@ class RideOffer {
 
   RideOffer({
     required this.id,
+    required this.rideRequestId,
     required this.customerId,
     required this.driverId,
     required this.pickupLocation,
@@ -33,6 +35,7 @@ class RideOffer {
   factory RideOffer.fromMap(Map<String, dynamic> map) {
     return RideOffer(
       id: map['id'] as String,
+      rideRequestId: map['ride_request_id'] as String,
       customerId: map['customer_id'] as String,
       driverId: map['driver_id'] as String,
       pickupLocation: map['pickup_location'] as String,
@@ -53,6 +56,7 @@ class RideOffer {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'ride_request_id': rideRequestId,
       'customer_id': customerId,
       'driver_id': driverId,
       'pickup_location': pickupLocation,
@@ -69,6 +73,7 @@ class RideOffer {
   /// Creates a copy with updated values
   RideOffer copyWith({
     String? id,
+    String? rideRequestId,
     String? customerId,
     String? driverId,
     String? pickupLocation,
@@ -82,6 +87,7 @@ class RideOffer {
   }) {
     return RideOffer(
       id: id ?? this.id,
+      rideRequestId: rideRequestId ?? this.rideRequestId,
       customerId: customerId ?? this.customerId,
       driverId: driverId ?? this.driverId,
       pickupLocation: pickupLocation ?? this.pickupLocation,
@@ -142,12 +148,24 @@ class RideNegotiationService {
   /// Accepts a ride offer using the atomic RPC function
   Future<RideOffer> acceptOffer(String offerId) async {
     try {
+      // First get the offer details to get ride_request_id, driver_id, and amount
+      final offer = await getOffer(offerId);
+
+      // Call the atomic accept function with required parameters
       final response = await _supabase
-          .rpc('accept_offer_atomic', params: {'offer_id': offerId})
+          .rpc(
+            'accept_offer_atomic',
+            params: {
+              'p_ride_request': offer.rideRequestId,
+              'p_driver': offer.driverId,
+              'p_amount': offer.proposedPrice,
+            },
+          )
           .select()
           .single();
 
-      return RideOffer.fromMap(response);
+      // Update the offer status locally
+      return offer.copyWith(status: 'accepted', updatedAt: DateTime.now());
     } on PostgrestException catch (e) {
       if (e.code == 'P0001') {
         throw Exception('Offer no longer available or already accepted');
