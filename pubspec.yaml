@@ -59,6 +59,9 @@ dependencies:
   # SVG rendering
   flutter_svg: ^2.0.7
 
+  # Polyline points for route drawing
+  flutter_polyline_points: ^2.1.0
+
   # App links for deep linking (Android only) - DISABLED due to cross-drive symlink issues
   # app_links: ^6.4.1
 
