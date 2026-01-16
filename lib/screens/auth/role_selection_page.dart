@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:albocarride/utils/app_theme.dart';
 
 class RoleSelectionPage extends StatelessWidget {
   const RoleSelectionPage({super.key});
@@ -6,85 +7,63 @@ class RoleSelectionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
+        child: Center(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // App Logo/Title
-                const Column(
-                  children: [
-                    Icon(
-                      Icons.directions_car,
-                      size: 64,
-                      color: Colors.deepPurple,
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'AlboCarRide',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Your ride, your way',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                  ],
-                ),
+                _buildHeader(context),
                 const SizedBox(height: 48),
-                // Title
-                const Text(
-                  'How would you like to use AlboCarRide?',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+                Text(
+                  'How would you like to use the app?',
+                  style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                // Role Cards
                 RoleCard(
                   title: 'Customer',
-                  description: 'Book rides and get to your destination',
-                  icon: Icons.person,
-                  color: Colors.blue,
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    '/signup',
-                    arguments: 'customer',
-                  ),
+                  description: 'Book rides and get to your destination.',
+                  icon: Icons.person_outline,
+                  color: AppTheme.primaryColor,
+                  onTap: () => Navigator.pushNamed(context, '/signup', arguments: 'customer'),
                 ),
                 const SizedBox(height: 20),
                 RoleCard(
                   title: 'Driver',
-                  description: 'Offer rides and earn money',
-                  icon: Icons.directions_car,
-                  color: Colors.green,
-                  onTap: () => Navigator.pushNamed(
-                    context,
-                    '/signup',
-                    arguments: 'driver',
-                  ),
-                ),
-                const SizedBox(height: 32),
-                // Footer Text
-                const Text(
-                  'Choose your role to get started',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  description: 'Offer rides and earn money.',
+                  icon: Icons.drive_eta_outlined,
+                  color: AppTheme.secondaryColor,
+                  onTap: () => Navigator.pushNamed(context, '/signup', arguments: 'driver'),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Column(
+      children: [
+        Icon(
+          Icons.directions_car_filled,
+          size: 64,
+          color: AppTheme.primaryColor,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'AlboCarRide',
+          style: Theme.of(context).textTheme.displayLarge?.copyWith(color: AppTheme.primaryColor),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Your ride, your way.',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+      ],
     );
   }
 }
@@ -107,77 +86,52 @@ class RoleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      elevation: 2,
+    return InkWell(
+      onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
+        padding: const EdgeInsets.all(24.0),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(26), // 0.1 opacity
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              children: [
-                // Icon Container
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: color.withAlpha(26), // 0.1 opacity
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: 30, color: color),
-                ),
-                const SizedBox(width: 20),
-                // Text Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Arrow Icon
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: color.withAlpha(26), // 0.1 opacity
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.arrow_forward, size: 20, color: color),
-                ),
-              ],
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 30, color: color),
             ),
-          ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+          ],
         ),
       ),
     );

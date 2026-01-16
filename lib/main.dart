@@ -3,8 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'firebase_options.dart';
 import 'package:albocarride/screens/auth/auth_wrapper.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
@@ -15,7 +13,7 @@ import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
-import 'package:albocarride/screens/home/book_ride_page.dart';
+import 'package:albocarride/screens/home/customer_ride_request_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
@@ -26,129 +24,53 @@ import 'package:albocarride/utils/app_theme.dart';
 import 'package:albocarride/screens/driver/payment_details_page.dart';
 import 'package:albocarride/screens/customer_payment_page.dart';
 
-// Background message handler (must be a top-level function)
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you're going to use other Firebase services in the background, such as Firestore,
-  // make sure to call `initializeApp` before using other Firebase services.
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  print("Handling a background message: ${message.messageId}");
-  print("Message data: ${message.data}");
-}
-
 Future<void> main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
-
-    // Load environment variables from assets
-    await dotenv.load();
-
-    // Initialize Firebase
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
-
-    // Set up Firebase Messaging after Supabase is initialized
-    await _setupFirebaseMessaging();
-
-    // Initialize Auth Service for session management
-    print('main: Initializing AuthService...');
-    await AuthService.initialize();
-    print('main: AuthService initialization completed');
-
+    await _initializeServices();
     runApp(const MyApp());
-  } catch (e, stackTrace) {
-    print('FATAL ERROR during app initialization: $e');
-    print('Stack trace: $stackTrace');
-    // Optionally, show an error dialog or a blank error screen
-    runApp(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Text(
-              'Failed to initialize app: $e',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      ),
-    );
+  } catch (e) {
+    runApp(ErrorApp(error: e.toString()));
   }
 }
 
+Future<void> _initializeServices() async {
+  await dotenv.load();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+  );
+  await _setupFirebaseMessaging();
+  await AuthService.initialize();
+}
+
 Future<void> _setupFirebaseMessaging() async {
-  try {
-    // Request notification permissions
-    final messaging = FirebaseMessaging.instance;
+  final messaging = FirebaseMessaging.instance;
+  final settings = await messaging.requestPermission();
 
-    NotificationSettings settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    print('User granted permission: ${settings.authorizationStatus}');
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // Get the device token
-      String? token = await messaging.getToken();
-      print('Firebase Messaging Token: $token');
-      if (token != null) {
-        _saveFcmToken(token);
-      }
-
-      // Listen for token refresh
-      messaging.onTokenRefresh.listen(_saveFcmToken);
-    }
-
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Got a message whilst in the foreground!');
-      print('Message data: ${message.data}');
-
-      if (message.notification != null) {
-        print('Message also contained a notification: ${message.notification}');
-      }
-    });
-
-    // Handle background messages
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Handle when the app is opened from a terminated state
-    FirebaseMessaging.instance.getInitialMessage().then((
-      RemoteMessage? message,
-    ) {
-      if (message != null) {
-        print('App opened from terminated state with message: ${message.data}');
-        // You can navigate to a specific screen here based on the message data
-      }
-    });
-
-    // Handle when the app is in the background and opened via notification
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('App opened from background via notification: ${message.data}');
-      // You can navigate to a specific screen here based on the message data
-    });
-  } catch (e) {
-    print('Error setting up Firebase Messaging: $e');
+  if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+    final token = await messaging.getToken();
+    if (token != null) _saveFcmToken(token);
+    messaging.onTokenRefresh.listen(_saveFcmToken);
   }
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+}
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Handle background message
 }
 
 void _saveFcmToken(String token) async {
   final userId = Supabase.instance.client.auth.currentUser?.id;
   if (userId != null) {
     try {
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'fcm_token': token})
-          .eq('id', userId);
-      print('FCM token saved for user $userId');
+      await Supabase.instance.client.from('profiles').update({'fcm_token': token}).eq('id', userId);
     } catch (e) {
-      print('Error saving FCM token: $e');
+      // Handle error
     }
   }
 }
@@ -166,47 +88,41 @@ class MyApp extends StatelessWidget {
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
-        '/signup': (context) {
-          final role =
-              ModalRoute.of(context)!.settings.arguments as String? ??
-              'customer';
-          return SignupPage(role: role);
-        },
-        '/vehicle-type-selection': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as String?;
-          return VehicleTypeSelectionPage(driverId: args ?? '');
-        },
+        '/signup': (context) => SignupPage(role: ModalRoute.of(context)!.settings.arguments as String? ?? 'customer'),
+        '/vehicle-type-selection': (context) => VehicleTypeSelectionPage(driverId: ModalRoute.of(context)!.settings.arguments as String? ?? ''),
         '/vehicle-details': (context) {
-          final args =
-              ModalRoute.of(context)!.settings.arguments
-                  as Map<String, dynamic>?;
-          return VehicleDetailsPage(
-            driverId: args?['driverId'] ?? '',
-            vehicleType: args?['vehicleType'] ?? 'car',
-          );
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return VehicleDetailsPage(driverId: args?['driverId'] ?? '', vehicleType: args?['vehicleType'] ?? 'car');
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
         '/driver-dashboard': (context) => const ComprehensiveDriverDashboard(),
         '/payment-details': (context) => const PaymentDetailsPage(),
-        '/customer-payment': (context) {
-          final tripId = ModalRoute.of(context)!.settings.arguments as String;
-          return CustomerPaymentPage(tripId: tripId);
-        },
+        '/customer-payment': (context) => CustomerPaymentPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
         '/customer_home': (context) => const CustomerHomePage(),
-        '/book-ride': (context) => const BookRidePage(),
+        '/customer-ride-request': (context) => const CustomerRideRequestPage(),
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),
-        '/driver-trip-management': (context) {
-          final tripId = ModalRoute.of(context)!.settings.arguments as String;
-          return DriverTripManagementPage(tripId: tripId);
-        },
-        '/rider-trip-tracking': (context) {
-          final tripId = ModalRoute.of(context)!.settings.arguments as String;
-          return RiderTripTrackingPage(tripId: tripId);
-        },
+        '/driver-trip-management': (context) => DriverTripManagementPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
+        '/rider-trip-tracking': (context) => RiderTripTrackingPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
       },
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String error;
+  const ErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('Failed to initialize app: $error', textAlign: TextAlign.center),
+        ),
+      ),
     );
   }
 }
