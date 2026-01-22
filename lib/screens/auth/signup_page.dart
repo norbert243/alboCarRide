@@ -1,7 +1,9 @@
+
 import 'package:flutter/material.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/services/connectivity_service.dart';
 
 class SignupPage extends StatefulWidget {
   final String role;
@@ -32,6 +34,18 @@ class _SignupPageState extends State<SignupPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Check connectivity
+    final isOnline = await ConnectivityService.instance.checkConnectivity();
+    if (!isOnline) {
+      if (mounted) {
+        CustomToast.showError(
+          context: context,
+          message: 'No internet connection. Please check your network.',
+        );
+      }
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -55,7 +69,16 @@ class _SignupPageState extends State<SignupPage> {
           CustomToast.showSuccess(context: context, message: 'Welcome to AlboCarRide!');
           // Navigate to the appropriate screen based on role
           if (widget.role == 'driver') {
-            Navigator.pushNamedAndRemoveUntil(context, '/vehicle-type-selection', (route) => false, arguments: user.id);
+            Navigator.pushNamedAndRemoveUntil(
+  context,
+  '/vehicle-type-selection',
+  (route) => false,
+  arguments: {
+    'driverId': user.id,
+    'fullName': _fullNameController.text,
+    'phone': _phoneController.text,
+  },
+);
           } else {
             Navigator.pushNamedAndRemoveUntil(context, '/customer_home', (route) => false);
           }
@@ -128,7 +151,8 @@ class _SignupPageState extends State<SignupPage> {
             prefixIcon: Icon(Icons.person_outline),
             hintText: 'Full Name',
           ),
-          validator: (value) => value!.isEmpty ? 'Please enter your full name' : null,
+          textCapitalization: TextCapitalization.words,
+          validator: InputValidators.validateName,
           enabled: !_otpSent,
         ),
         const SizedBox(height: 16),
@@ -136,12 +160,15 @@ class _SignupPageState extends State<SignupPage> {
           controller: _phoneController,
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.phone_outlined),
-            hintText: 'Phone Number',
+            hintText: 'Phone Number (e.g., +27123456789)',
           ),
           keyboardType: TextInputType.phone,
           validator: (value) {
-            if (value == null || value.isEmpty) return 'Please enter your phone number';
-            if (!value.startsWith('+')) return 'Include country code (e.g., +27...)';
+            final basicValidation = InputValidators.validatePhoneNumber(value);
+            if (basicValidation != null) return basicValidation;
+            if (value != null && !value.startsWith('+')) {
+              return 'Include country code (e.g., +27...)';
+            }
             return null;
           },
           enabled: !_otpSent,
@@ -155,7 +182,8 @@ class _SignupPageState extends State<SignupPage> {
               hintText: 'Enter OTP',
             ),
             keyboardType: TextInputType.number,
-            validator: (value) => value!.isEmpty ? 'Please enter the OTP' : null,
+            maxLength: 6,
+            validator: InputValidators.validateOtp,
           ),
         ],
       ],

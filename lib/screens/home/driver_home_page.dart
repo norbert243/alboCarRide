@@ -14,7 +14,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   bool _isLoading = false;
 
   Future<void> _signOut() async {
-    await AuthService.clearSession();
+    await AuthService.instance.clearSession();
   }
 
   Future<void> _toggleOnlineStatus() async {

@@ -1,6 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:albocarride/twilio/twilio_service.dart';
 
 class NotificationService {
+  static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
   /// Send notification to drivers about new ride request
   static Future<void> notifyDriversAboutRide({
     required String rideRequestId,
@@ -9,48 +13,50 @@ class NotificationService {
     required double estimatedFare,
   }) async {
     try {
-      // Get all online drivers
+      // Get all online drivers with their FCM tokens
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('id, full_name, phone')
+          .select('id, full_name, phone, fcm_token')
           .eq('is_online', true)
           .eq('role', 'driver');
 
       if (response.isNotEmpty) {
         final drivers = response as List<dynamic>;
 
-        // In a real implementation, you would:
-        // 1. Send push notifications via Firebase Cloud Messaging
-        // 2. Send SMS notifications via Twilio
-        // 3. Update real-time database for driver apps
-
         for (final driver in drivers) {
           final driverId = driver['id'];
-          final driverName = driver['full_name'];
           final driverPhone = driver['phone'];
+          final fcmToken = driver['fcm_token'];
 
-          // Send push notification (simulated)
-          await _sendPushNotification(
-            userId: driverId,
-            title: 'New Ride Request',
-            body:
-                'Ride from $pickupLocation to $dropoffLocation - \$${estimatedFare.toStringAsFixed(2)}',
-          );
+          // Send push notification via FCM
+          if (fcmToken != null && fcmToken.isNotEmpty) {
+            await _sendPushNotification(
+              userId: driverId,
+              title: '🚗 New Ride Request!',
+              body: 'From: $pickupLocation\nTo: $dropoffLocation\nFare: \$${estimatedFare.toStringAsFixed(2)}',
+              data: {
+                'type': 'new_ride_request',
+                'ride_request_id': rideRequestId,
+                'pickup': pickupLocation,
+                'dropoff': dropoffLocation,
+                'fare': estimatedFare.toString(),
+              },
+            );
+          }
 
-          // Send SMS notification (using existing Twilio service)
-          await _sendSmsNotification(
-            phoneNumber: driverPhone,
-            message:
-                'New ride request: $pickupLocation to $dropoffLocation. Estimated fare: \$${estimatedFare.toStringAsFixed(2)}',
-          );
+          // Send SMS notification using Twilio
+          if (driverPhone != null && driverPhone.isNotEmpty) {
+            await _sendSmsNotification(
+              phoneNumber: driverPhone,
+              message: '🚗 New ride request: $pickupLocation to $dropoffLocation. Fare: \$${estimatedFare.toStringAsFixed(2)}. Open the app to accept!',
+            );
+          }
         }
 
-        print(
-          'Notified ${drivers.length} drivers about ride request $rideRequestId',
-        );
+        print('✅ Notified ${drivers.length} drivers about ride request $rideRequestId');
       }
     } catch (e) {
-      print('Error notifying drivers: $e');
+      print('❌ Error notifying drivers: $e');
     }
   }
 
@@ -67,62 +73,73 @@ class NotificationService {
       // Get customer details
       final response = await Supabase.instance.client
           .from('profiles')
-          .select('full_name, phone')
+          .select('full_name, phone, fcm_token')
           .eq('id', customerId)
           .single();
 
       final customerName = response['full_name'];
-      final customerPhone = response['phone'];
+      final customerPhone = response['phone'] ?? '';
 
       String message;
       String title;
+      String emoji;
 
       switch (status) {
         case 'accepted':
-          title = 'Ride Accepted!';
-          message =
-              'Driver $driverName has accepted your ride request. Estimated arrival: $estimatedArrival';
+          emoji = '🎉';
+          title = 'Driver Found!';
+          message = '$driverName has accepted your ride and is on the way! ETA: ${estimatedArrival ?? "Soon"}';
           break;
         case 'arrived':
-          title = 'Driver Arrived';
-          message = 'Driver $driverName has arrived at your pickup location';
+          emoji = '📍';
+          title = 'Driver Arrived!';
+          message = '$driverName has arrived at your pickup location. Please meet your driver.';
           break;
         case 'in_progress':
+          emoji = '🚗';
           title = 'Ride Started';
-          message = 'Your ride with $driverName has started';
+          message = 'Your ride with $driverName has started. Enjoy your trip!';
           break;
         case 'completed':
+          emoji = '✅';
           title = 'Ride Completed';
-          message =
-              'Your ride has been completed. Fare: \$${fare?.toStringAsFixed(2)}';
+          message = 'Your ride is complete. Total fare: \$${fare?.toStringAsFixed(2) ?? "0.00"}. Thank you for riding with us!';
           break;
         case 'cancelled':
+          emoji = '❌';
           title = 'Ride Cancelled';
-          message = 'Your ride has been cancelled';
+          message = 'Your ride has been cancelled. Please request a new ride.';
           break;
         default:
+          emoji = 'ℹ️';
           title = 'Ride Update';
-          message = 'Your ride status has been updated to: $status';
+          message = 'Your ride status: $status';
       }
 
-      // Send push notification (simulated)
+      // Send push notification
       await _sendPushNotification(
         userId: customerId,
-        title: title,
+        title: '$emoji $title',
         body: message,
+        data: {
+          'type': 'ride_status_update',
+          'ride_id': rideId,
+          'status': status,
+          'driver_name': driverName ?? '',
+        },
       );
 
       // Send SMS notification
-      await _sendSmsNotification(
-        phoneNumber: customerPhone,
-        message: '$title: $message',
-      );
+      if (customerPhone.isNotEmpty) {
+        await _sendSmsNotification(
+          phoneNumber: customerPhone,
+          message: '$emoji $title: $message',
+        );
+      }
 
-      print(
-        'Sent notification to customer $customerName about ride $rideId: $status',
-      );
+      print('✅ Notified customer $customerName about ride $rideId: $status');
     } catch (e) {
-      print('Error notifying customer: $e');
+      print('❌ Error notifying customer: $e');
     }
   }
 
@@ -168,43 +185,65 @@ class NotificationService {
     }
   }
 
-  /// Simulated push notification (replace with Firebase Cloud Messaging)
+  /// Send push notification via Firebase Cloud Messaging
   static Future<void> _sendPushNotification({
     required String userId,
     required String title,
     required String body,
+    Map<String, String>? data,
   }) async {
     try {
-      await Supabase.instance.client.functions.invoke('send-notification', body: {
-        'user_id': userId,
-        'title': title,
-        'body': body,
-      });
-      print('Push notification sent to $userId: $title - $body');
+      // Get user's FCM token from database
+      final userResponse = await Supabase.instance.client
+          .from('profiles')
+          .select('fcm_token')
+          .eq('id', userId)
+          .maybeSingle();
+
+      final fcmToken = userResponse?['fcm_token'];
+
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        // Send via Supabase Edge Function that handles FCM
+        await Supabase.instance.client.functions.invoke('send-notification', body: {
+          'fcm_token': fcmToken,
+          'user_id': userId,
+          'title': title,
+          'body': body,
+          'data': data ?? {},
+        });
+        print('✅ Push notification sent to $userId: $title');
+      } else {
+        print('⚠️ No FCM token for user $userId');
+      }
     } catch (e) {
-      print('Error sending push notification: $e');
+      print('❌ Error sending push notification: $e');
     }
   }
 
-  /// Send SMS notification using Twilio (already implemented)
+  /// Send SMS notification using Twilio
   static Future<void> _sendSmsNotification({
     required String phoneNumber,
     required String message,
   }) async {
     try {
-      // Use the existing TwilioService for SMS notifications
-      // For now, we'll simulate this since TwilioService is already implemented
+      if (phoneNumber.isEmpty) {
+        print('⚠️ No phone number provided for SMS');
+        return;
+      }
 
-      print('Sending SMS to $phoneNumber: $message');
-      await Future.delayed(const Duration(milliseconds: 200));
+      // Use the TwilioService for SMS notifications
+      final success = await TwilioService.sendSMS(
+        to: phoneNumber,
+        message: message,
+      );
 
-      // Real implementation would be:
-      // await TwilioService.sendSMS(
-      //   phoneNumber: phoneNumber,
-      //   message: message,
-      // );
+      if (success) {
+        print('✅ SMS sent to $phoneNumber');
+      } else {
+        print('⚠️ SMS failed to send to $phoneNumber');
+      }
     } catch (e) {
-      print('Error sending SMS notification: $e');
+      print('❌ Error sending SMS notification: $e');
     }
   }
 

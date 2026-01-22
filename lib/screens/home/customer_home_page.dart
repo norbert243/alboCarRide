@@ -1,116 +1,166 @@
 import 'package:flutter/material.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:albocarride/widgets/customer_map_widget.dart';
 
-class CustomerHomePage extends StatelessWidget {
+class CustomerHomePage extends StatefulWidget {
   const CustomerHomePage({super.key});
 
-  Future<void> _signOut(BuildContext context) async {
-    await AuthService.clearSession();
-    if (context.mounted) {
+  @override
+  State<CustomerHomePage> createState() => _CustomerHomePageState();
+}
+
+class _CustomerHomePageState extends State<CustomerHomePage> {
+  bool _canSwitchToDriver = false;
+  bool _isCheckingRoles = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAvailableRoles();
+  }
+
+  Future<void> _checkAvailableRoles() async {
+    try {
+      final userId = await SessionService.getUserId();
+      if (userId != null) {
+        final roles = await SessionService.getAvailableRoles(userId);
+        if (mounted) {
+          setState(() {
+            _canSwitchToDriver = roles.contains('driver');
+            _isCheckingRoles = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCheckingRoles = false);
+      }
+    }
+  }
+
+  Future<void> _switchToDriver() async {
+    final userId = await SessionService.getUserId();
+    if (userId == null) return;
+
+    // Check for active trips
+    final hasActiveTrip = await SessionService.hasActiveTrip(userId);
+    if (hasActiveTrip) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot switch roles while you have an active trip'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Switch role
+    await SessionService.updateUserRole('driver');
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/enhanced-driver-home',
+        (route) => false,
+      );
+    }
+  }
+
+  Future<void> _signOut() async {
+    await AuthService.instance.clearSession();
+    await SessionService.clearSession();
+    if (mounted) {
       Navigator.pushNamedAndRemoveUntil(context, '/role-selection', (route) => false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: _buildMapSection(context),
-              ),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: _buildQuickActions(context),
-              ),
-              const SizedBox(height: 32),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: _buildRecentActivity(),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
         ),
       ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Welcome back,', style: Theme.of(context).textTheme.bodyMedium),
-              Text('Valued Customer', style: Theme.of(context).textTheme.displaySmall),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome Back',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Where to?',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  if (_canSwitchToDriver && !_isCheckingRoles)
+                    IconButton(
+                      onPressed: _switchToDriver,
+                      icon: const Icon(Icons.drive_eta, color: Colors.white),
+                      tooltip: 'Switch to Driver Mode',
+                    ),
+                  IconButton(
+                    onPressed: () {},
+                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pushNamed(context, '/account-settings'),
+                    icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
+                    tooltip: 'Account Settings',
+                  ),
+                  IconButton(
+                    onPressed: () => _signOut(),
+                    icon: const Icon(Icons.logout, color: Colors.white),
+                  ),
+                ],
+              ),
             ],
-          ),
-          GestureDetector(
-            onTap: () => _showSignOutDialog(context),
-            child: const CircleAvatar(
-              radius: 28,
-              backgroundColor: AppTheme.primaryColor,
-              child: Icon(Icons.person, color: Colors.white, size: 32),
-            ),
           ),
         ],
       ),
     );
   }
-  
-  void _showSignOutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Sign Out'),
-          content: const Text('Are you sure you want to sign out?'),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Sign Out'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                _signOut(context);
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   Widget _buildMapSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Find Your Ride', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8),
-        Text('Available drivers near you', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 16),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: const CustomerMapWidget(height: 250),
-        ),
-      ],
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: const CustomerMapWidget(),
+      ),
     );
   }
 
@@ -118,43 +168,55 @@ class CustomerHomePage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Actions', style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          'Quick Actions',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         const SizedBox(height: 16),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 1.3,
+        Row(
           children: [
-            _buildActionCard(
-              context,
-              icon: Icons.directions_car_filled,
-              title: 'Book a Ride',
-              color: AppTheme.primaryColor,
-              onTap: () => Navigator.pushNamed(context, '/customer-ride-request'),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Request Ride',
+                Icons.local_taxi,
+                Colors.deepPurple,
+                () => Navigator.pushNamed(context, '/customer-ride-request'),
+              ),
             ),
-            _buildActionCard(
-              context,
-              icon: Icons.history,
-              title: 'Ride History',
-              color: AppTheme.secondaryColor,
-              onTap: () => Navigator.pushNamed(context, '/ride-history'),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Ride History',
+                Icons.history,
+                Colors.blue,
+                () => Navigator.pushNamed(context, '/ride-history'),
+              ),
             ),
-            _buildActionCard(
-              context,
-              icon: Icons.payment,
-              title: 'Payments',
-              color: Colors.green,
-              onTap: () => Navigator.pushNamed(context, '/payments'),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Payments',
+                Icons.payment,
+                Colors.green,
+                () => Navigator.pushNamed(context, '/payments'),
+              ),
             ),
-            _buildActionCard(
-              context,
-              icon: Icons.support_agent,
-              title: 'Support',
-              color: Colors.orange,
-              onTap: () => Navigator.pushNamed(context, '/support'),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Support',
+                Icons.support_agent,
+                Colors.orange,
+                () => Navigator.pushNamed(context, '/support'),
+              ),
             ),
           ],
         ),
@@ -162,43 +224,62 @@ class CustomerHomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildActionCard(BuildContext context, {required IconData icon, required String title, required Color color, required VoidCallback onTap}) {
-    return InkWell(
+  Widget _buildActionCard(BuildContext context, String title, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 32, color: color),
-            const Spacer(),
-            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: color)),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 28, color: color),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRecentActivity() {
+  Widget _buildRecentActivity(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Recent Activity', style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 16),
-        _buildActivityItem('Ride to Downtown', 'Completed • \$15.50', Icons.check_circle, Colors.green),
-        _buildActivityItem('Ride to Airport', 'Cancelled • \$0.00', Icons.cancel, Colors.red),
-        _buildActivityItem('Ride to Mall', 'Completed • \$12.75', Icons.check_circle, Colors.green),
+        _buildActivityItem(context, 'Ride to Downtown', 'Completed • \$15.50', Icons.check_circle, Colors.green),
+        _buildActivityItem(context, 'Ride to Airport', 'Cancelled • \$0.00', Icons.cancel, Colors.red),
+        _buildActivityItem(context, 'Ride to Mall', 'Completed • \$12.75', Icons.check_circle, Colors.green),
       ],
     );
   }
 
-  Widget _buildActivityItem(String title, String subtitle, IconData icon, Color color) {
+  Widget _buildActivityItem(BuildContext context, String title, String subtitle, IconData icon, Color color) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -240,5 +321,36 @@ class CustomerHomePage extends StatelessWidget {
       ),
     );
   }
-}
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: _buildMapSection(context),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: _buildQuickActions(context),
+              ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: _buildRecentActivity(context),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/customer_location_service.dart';
 import '../services/nearby_drivers_service.dart';
+import '../utils/custom_map_markers.dart';
 
 class CustomerMapWidget extends StatefulWidget {
   final double height;
@@ -28,6 +29,7 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
   String _errorMessage = '';
   bool _isDisposed = false;
   bool _loadingDrivers = false;
+  bool _markersInitialized = false;
 
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
@@ -38,7 +40,15 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
   @override
   void initState() {
     super.initState();
+    _initializeMarkers();
     _getCurrentLocation();
+  }
+
+  Future<void> _initializeMarkers() async {
+    if (!_markersInitialized) {
+      await CustomMapMarkers.initialize();
+      _markersInitialized = true;
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -141,7 +151,7 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
         _markers.clear();
         _circles.clear();
 
-        // Add current location marker
+        // Add current location marker with person icon
         _markers.add(
           Marker(
             markerId: const MarkerId('current_location'),
@@ -149,9 +159,7 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
               _currentPosition!.latitude,
               _currentPosition!.longitude,
             ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueBlue,
-            ),
+            icon: CustomMapMarkers.getPersonMarker(),
             infoWindow: const InfoWindow(
               title: 'Your Location',
               snippet: 'Current position',
@@ -184,20 +192,19 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
     for (final driver in _nearbyDrivers) {
       final markerId = MarkerId('driver_${driver.id}');
 
-      // Choose car icon based on vehicle type
-      Color carColor;
+      // Get vehicle type label for info window
       String carType;
       switch (driver.vehicleType) {
         case 'suv':
-          carColor = Colors.orange;
           carType = 'SUV';
           break;
         case 'luxury':
-          carColor = Colors.purple;
           carType = 'Luxury';
           break;
+        case 'comfort':
+          carType = 'Comfort';
+          break;
         default:
-          carColor = Colors.green;
           carType = 'Standard';
       }
 
@@ -205,10 +212,10 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
         Marker(
           markerId: markerId,
           position: LatLng(driver.latitude, driver.longitude),
-          icon: _createCarIcon(carColor),
+          icon: CustomMapMarkers.getCarMarker(driver.vehicleType),
           infoWindow: InfoWindow(
             title: driver.name,
-            snippet: '$carType • ⭐ ${driver.rating}',
+            snippet: '$carType • ${driver.rating}',
           ),
           anchor: const Offset(0.5, 0.5),
           onTap: () {
@@ -218,21 +225,6 @@ class _CustomerMapWidgetState extends State<CustomerMapWidget> {
         ),
       );
     }
-  }
-
-  BitmapDescriptor _createCarIcon(Color color) {
-    // Create a custom car icon using Flutter's painting capabilities
-    // For now, we'll use a colored marker that represents a car
-    // In a real app, you would create custom bitmap icons
-    return BitmapDescriptor.defaultMarkerWithHue(_colorToHue(color));
-  }
-
-  double _colorToHue(Color color) {
-    // Convert color to hue value for bitmap descriptor
-    if (color == Colors.green) return BitmapDescriptor.hueGreen;
-    if (color == Colors.orange) return BitmapDescriptor.hueOrange;
-    if (color == Colors.purple) return BitmapDescriptor.hueViolet;
-    return BitmapDescriptor.hueBlue;
   }
 
   void _showDriverInfo(NearbyDriver driver) {

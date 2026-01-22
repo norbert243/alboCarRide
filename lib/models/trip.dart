@@ -23,6 +23,7 @@ class Trip {
   final String? cancellationReason;
   final DateTime? endTime;
   final double? finalPrice;
+  final String? vehicleType;
 
 
   Trip({
@@ -46,6 +47,7 @@ class Trip {
     this.cancellationReason,
     this.endTime,
     this.finalPrice,
+    this.vehicleType,
   });
 
   factory Trip.fromMap(Map<String, dynamic> m) {
@@ -86,6 +88,7 @@ class Trip {
       cancellationReason: m['cancellation_reason'] as String?,
       endTime: m['end_time'] != null ? DateTime.parse(m['end_time'] as String) : null,
       finalPrice: (m['final_price'] as num?)?.toDouble(),
+      vehicleType: m['vehicle_type'] as String?,
     );
   }
 
@@ -113,5 +116,6 @@ class Trip {
     'cancellation_reason': cancellationReason,
     'end_time': endTime?.toIso8601String(),
     'final_price': finalPrice,
+    'vehicle_type': vehicleType,
   };
 }

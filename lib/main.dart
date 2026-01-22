@@ -13,6 +13,7 @@ import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
 import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
+import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
 import 'package:albocarride/screens/home/customer_ride_request_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
@@ -23,6 +24,9 @@ import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:albocarride/screens/driver/payment_details_page.dart';
 import 'package:albocarride/screens/customer_payment_page.dart';
+import 'package:albocarride/screens/trips/trip_concern_page.dart';
+import 'package:albocarride/screens/account/account_settings_page.dart';
+import 'package:albocarride/screens/account/profile_picture_page.dart';
 
 Future<void> main() async {
   try {
@@ -42,7 +46,7 @@ Future<void> _initializeServices() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   await _setupFirebaseMessaging();
-  await AuthService.initialize();
+  await AuthService.instance.initialize();
 }
 
 Future<void> _setupFirebaseMessaging() async {
@@ -89,14 +93,27 @@ class MyApp extends StatelessWidget {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
         '/signup': (context) => SignupPage(role: ModalRoute.of(context)!.settings.arguments as String? ?? 'customer'),
-        '/vehicle-type-selection': (context) => VehicleTypeSelectionPage(driverId: ModalRoute.of(context)!.settings.arguments as String? ?? ''),
+        '/vehicle-type-selection': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return VehicleTypeSelectionPage(
+            driverId: args?['driverId'] ?? '',
+            fullName: args?['fullName'] ?? '',
+            phone: args?['phone'] ?? '',
+          );
+        },
         '/vehicle-details': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-          return VehicleDetailsPage(driverId: args?['driverId'] ?? '', vehicleType: args?['vehicleType'] ?? 'car');
+          return VehicleDetailsPage(
+            driverId: args?['driverId'] ?? '',
+            vehicleType: args?['vehicleType'] ?? 'car',
+            fullName: args?['fullName'] ?? '',
+            phone: args?['phone'] ?? '',
+          );
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
         '/driver-dashboard': (context) => const ComprehensiveDriverDashboard(),
+        '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
         '/payment-details': (context) => const PaymentDetailsPage(),
         '/customer-payment': (context) => CustomerPaymentPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
         '/customer_home': (context) => const CustomerHomePage(),
@@ -106,6 +123,15 @@ class MyApp extends StatelessWidget {
         '/support': (context) => const SupportPage(),
         '/driver-trip-management': (context) => DriverTripManagementPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
         '/rider-trip-tracking': (context) => RiderTripTrackingPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
+        '/trip-concern': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          return TripConcernPage(
+            tripId: args['tripId'] as String,
+            tripDetails: args['tripDetails'] as String?,
+          );
+        },
+        '/account-settings': (context) => const AccountSettingsPage(),
+        '/profile-picture': (context) => const ProfilePicturePage(),
       },
     );
   }

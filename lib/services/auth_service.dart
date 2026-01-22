@@ -12,6 +12,8 @@ class AuthService {
 
   static const _kAccessTokenKey = 'supabase_access_token';
   static const _kRefreshTokenKey = 'supabase_refresh_token';
+  static const _kOtpKey = 'pending_otp';
+  static const _kOtpPhoneKey = 'pending_otp_phone';
 
   String? _currentUserId;
   String? get currentUserId => _currentUserId;
@@ -54,11 +56,28 @@ class AuthService {
 
   static Future<bool> sendOtp(String phone) async {
     try {
-      // In a real app, you would use a service like Twilio to send an OTP
-      // For this example, we'll just simulate it.
-      print('Sending OTP to $phone');
-      return true;
+      // Generate OTP and send via Twilio
+      final otp = TwilioService.generateOTP();
+
+      // Store OTP temporarily for verification
+      await instance._storage.write(key: _kOtpKey, value: otp);
+      await instance._storage.write(key: _kOtpPhoneKey, value: phone);
+
+      // Send OTP via Twilio
+      final success = await TwilioService.sendOTP(phoneNumber: phone, otp: otp);
+
+      if (success) {
+        print('OTP sent successfully to $phone');
+        return true;
+      } else {
+        print('Failed to send OTP to $phone');
+        // Clear stored OTP on failure
+        await instance._storage.delete(key: _kOtpKey);
+        await instance._storage.delete(key: _kOtpPhoneKey);
+        return false;
+      }
     } catch (e) {
+      print('Error sending OTP: $e');
       return false;
     }
   }
@@ -70,11 +89,21 @@ class AuthService {
     required String role,
   }) async {
     try {
-      // In a real app, you would verify the OTP with your backend service.
-      // For this example, we'll assume the OTP is always '123456'.
-      if (otp != '123456') {
+      // Verify OTP against stored value
+      final storedOtp = await instance._storage.read(key: _kOtpKey);
+      final storedPhone = await instance._storage.read(key: _kOtpPhoneKey);
+
+      // Verify OTP matches and phone matches
+      if (storedOtp == null || storedOtp != otp) {
         throw 'Invalid OTP';
       }
+      if (storedPhone == null || storedPhone != phone) {
+        throw 'Phone number mismatch';
+      }
+
+      // Clear OTP after successful verification
+      await instance._storage.delete(key: _kOtpKey);
+      await instance._storage.delete(key: _kOtpPhoneKey);
 
       final email = '$phone@albocarride.com';
       final password = 'password'; // In a real app, generate a secure password

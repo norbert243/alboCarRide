@@ -1,14 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
-import 'package:albocarride/utils/map_utils.dart';
+import 'package:albocarride/utils/custom_map_markers.dart';
 import 'package:albocarride/screens/customer_payment_page.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Added this import
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RiderTripTrackingPage extends StatefulWidget {
   final String tripId;
@@ -29,20 +30,21 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
   final Set<Polyline> _polylines = {};
   PolylinePoints polylinePoints = PolylinePoints();
   
-  BitmapDescriptor? carMarker;
-  BitmapDescriptor? personMarker;
+  bool _markersInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMarkers();
+    _initializeMarkers();
     _loadTrip();
   }
-  
-  Future<void> _loadMarkers() async {
-    carMarker = await getBytesFromAsset('assets/images/car_marker.svg', 100);
-    personMarker = await getBytesFromAsset('assets/images/person_marker.svg', 100);
-    setState(() {});
+
+  Future<void> _initializeMarkers() async {
+    if (!_markersInitialized) {
+      await CustomMapMarkers.initialize();
+      _markersInitialized = true;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _loadTrip() async {
@@ -176,6 +178,7 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
                     SliverList(
                       delegate: SliverChildListDelegate([
                         _buildStatusIndicator(),
+                        _buildDriverCard(),
                         _buildTripInfo(),
                         _buildActionButtons(),
                       ]),
@@ -196,16 +199,16 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
       markerId: const MarkerId('pickup'),
       position: LatLng(pickup.latitude, pickup.longitude),
       infoWindow: const InfoWindow(title: 'Pickup'),
-      icon: personMarker ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      icon: CustomMapMarkers.getPickupMarker(),
     ));
-    
+
     if(_currentTrip?.dropoffLocation != null) {
       final dropoff = _currentTrip!.dropoffLocation!;
        _markers.add(Marker(
         markerId: const MarkerId('dropoff'),
         position: LatLng(dropoff.latitude, dropoff.longitude),
         infoWindow: const InfoWindow(title: 'Dropoff'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        icon: CustomMapMarkers.getDropoffMarker(),
       ));
     }
 
@@ -215,7 +218,7 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
         markerId: const MarkerId('driver'),
         position: LatLng(driverLocation.latitude, driverLocation.longitude),
         infoWindow: const InfoWindow(title: 'Driver'),
-        icon: carMarker ?? BitmapDescriptor.defaultMarker,
+        icon: CustomMapMarkers.getCarMarker('standard'),
       ));
     }
 
@@ -295,6 +298,100 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
     );
   }
   
+  Widget _buildDriverCard() {
+    if (_currentTrip == null || _currentTrip!.driverName == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Driver Profile Picture
+            FutureBuilder<String?>(
+              future: _getDriverProfilePicture(),
+              builder: (context, snapshot) {
+                return CircleAvatar(
+                  radius: 35,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: snapshot.data != null
+                      ? NetworkImage(snapshot.data!)
+                      : null,
+                  child: snapshot.data == null
+                      ? Icon(Icons.person, size: 35, color: Colors.grey[400])
+                      : null,
+                );
+              },
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentTrip!.driverName ?? 'Driver',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.star, size: 16, color: Colors.amber[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        '4.8',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(Icons.directions_car, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Text(
+                        _currentTrip!.vehicleType ?? 'Standard',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Call Driver Button
+            IconButton(
+              onPressed: () {
+                // TODO: Implement call driver
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Calling driver...')),
+                );
+              },
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withAlpha(26),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.phone, color: Colors.green),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<String?> _getDriverProfilePicture() async {
+    if (_currentTrip?.driverId == null) return null;
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', _currentTrip!.driverId!)
+          .single();
+      return response['profile_picture_url'];
+    } catch (e) {
+      return null;
+    }
+  }
+
   Widget _buildTripInfo() {
     if (_currentTrip == null) return const SizedBox.shrink();
 
@@ -326,7 +423,7 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
 
     final status = _currentTrip!.status;
     final isActive = status != 'completed' && status != 'cancelled';
-    
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -353,6 +450,27 @@ class _RiderTripTrackingPageState extends State<RiderTripTrackingPage> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Back to Home'),
             ),
+          const SizedBox(height: 12),
+          // Report Concern Button
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/trip-concern',
+                arguments: {
+                  'tripId': _currentTrip!.id,
+                  'tripDetails': '${_currentTrip!.pickupAddress} → ${_currentTrip!.dropoffAddress}',
+                },
+              );
+            },
+            icon: const Icon(Icons.report_problem_outlined),
+            label: const Text('Report a Concern'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.orange,
+              side: const BorderSide(color: Colors.orange),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
         ],
       ),
     );

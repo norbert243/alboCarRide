@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
 import 'package:albocarride/widgets/navigation_header.dart';
 
@@ -15,15 +16,151 @@ class EnhancedDriverHomePage extends StatefulWidget {
 class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   bool _isOnline = false;
   bool _isLoading = false;
+  bool _canSwitchToCustomer = false;
+  bool _hasProfilePicture = true;
+  String? _profilePictureUrl;
 
   @override
   void initState() {
     super.initState();
     _loadOnlineStatus();
+    _checkAvailableRoles();
+    _checkProfilePicture();
+  }
+
+  Future<void> _checkProfilePicture() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .select('profile_picture_url')
+            .eq('id', user.id)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _profilePictureUrl = response['profile_picture_url'];
+            _hasProfilePicture = response['profile_picture_url'] != null;
+          });
+
+          // Show profile picture prompt if not set
+          if (!_hasProfilePicture) {
+            _showProfilePicturePrompt();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking profile picture: $e');
+    }
+  }
+
+  void _showProfilePicturePrompt() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.camera_alt, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Profile Picture Required'),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'As a driver, you need to set a profile picture so riders can identify you.',
+                style: TextStyle(fontSize: 14),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'This helps build trust and safety for all users.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/profile-picture');
+              },
+              child: const Text('Add Picture'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Future<void> _checkAvailableRoles() async {
+    try {
+      final userId = await SessionService.getUserId();
+      if (userId != null) {
+        final roles = await SessionService.getAvailableRoles(userId);
+        if (mounted) {
+          setState(() {
+            _canSwitchToCustomer = roles.contains('customer');
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking roles: $e');
+    }
+  }
+
+  Future<void> _switchToCustomer() async {
+    final userId = await SessionService.getUserId();
+    if (userId == null) return;
+
+    // Check if online - must go offline first
+    if (_isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please go offline before switching roles'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Check for active trips
+    final hasActiveTrip = await SessionService.hasActiveTrip(userId);
+    if (hasActiveTrip) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot switch roles while you have an active trip'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Switch role
+    await SessionService.updateUserRole('customer');
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/customer_home',
+        (route) => false,
+      );
+    }
   }
 
   Future<void> _signOut() async {
-    await AuthService.clearSession();
+    await AuthService.instance.clearSession();
+    await SessionService.clearSession();
   }
 
   Future<void> _toggleOnlineStatus() async {
@@ -275,6 +412,15 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
+                    _buildSettingOption(
+                      Icons.account_circle,
+                      'Account Settings',
+                      'Edit profile and manage account',
+                      () {
+                        Navigator.pop(context); // Close settings modal first
+                        Navigator.pushNamed(context, '/account-settings');
+                      },
+                    ),
                     _buildSettingOption(
                       Icons.notifications,
                       'Notifications',
@@ -812,6 +958,12 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                 ],
               ),
             ),
+          if (_canSwitchToCustomer)
+            IconButton(
+              icon: const Icon(Icons.person),
+              tooltip: 'Switch to Customer Mode',
+              onPressed: _switchToCustomer,
+            ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
@@ -834,13 +986,48 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Diagnostic logging for layout
-            Builder(
-              builder: (context) {
-                debugPrint('🔍 EnhancedDriverHomePage: Column children building - checking constraints');
-                return const SizedBox.shrink();
-              },
-            ),
+            // Profile Picture Warning Banner
+            if (!_hasProfilePicture)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withAlpha(26),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning, color: Colors.orange),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Profile picture required',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          Text(
+                            'Add a photo so riders can identify you',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/profile-picture'),
+                      child: const Text('Add'),
+                    ),
+                  ],
+                ),
+              ),
             // 1️⃣ Header
             Container(
               width: double.infinity,

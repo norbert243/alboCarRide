@@ -6,8 +6,8 @@ import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 import 'package:albocarride/utils/app_theme.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
-import 'package:albocarride/utils/map_utils.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Moved to top
+import 'package:albocarride/utils/custom_map_markers.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class DriverTripManagementPage extends StatefulWidget {
   final String tripId;
@@ -30,20 +30,21 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
   final Set<Polyline> _polylines = {};
   PolylinePoints polylinePoints = PolylinePoints();
   
-  BitmapDescriptor? carMarker;
-  BitmapDescriptor? personMarker;
+  bool _markersInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMarkers();
+    _initializeMarkers();
     _loadTrip();
   }
-  
-  Future<void> _loadMarkers() async {
-    carMarker = await getBytesFromAsset('assets/images/car_marker.svg', 100);
-    personMarker = await getBytesFromAsset('assets/images/person_marker.svg', 100);
-    setState(() {});
+
+  Future<void> _initializeMarkers() async {
+    if (!_markersInitialized) {
+      await CustomMapMarkers.initialize();
+      _markersInitialized = true;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _loadTrip() async {
@@ -217,16 +218,16 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
       markerId: const MarkerId('pickup'),
       position: LatLng(pickup.latitude, pickup.longitude),
       infoWindow: const InfoWindow(title: 'Pickup'),
-      icon: personMarker ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      icon: CustomMapMarkers.getPersonMarker(),
     ));
-    
+
     if(_currentTrip?.dropoffLocation != null) {
       final dropoff = _currentTrip!.dropoffLocation!;
        _markers.add(Marker(
         markerId: const MarkerId('dropoff'),
         position: LatLng(dropoff.latitude, dropoff.longitude),
         infoWindow: const InfoWindow(title: 'Dropoff'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        icon: CustomMapMarkers.getDropoffMarker(),
       ));
     }
 
@@ -235,8 +236,8 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
       _markers.add(Marker(
         markerId: const MarkerId('driver'),
         position: LatLng(driverLocation.latitude, driverLocation.longitude),
-        infoWindow: const InfoWindow(title: 'Driver'),
-        icon: carMarker ?? BitmapDescriptor.defaultMarker,
+        infoWindow: const InfoWindow(title: 'Your Location'),
+        icon: CustomMapMarkers.getCarMarker('standard'),
       ));
     }
 
@@ -343,6 +344,29 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
     if (status == 'completed' || status == 'cancelled') {
       actions.add(_buildActionButton('Back to Home', () => Navigator.pop(context)));
     }
+
+    // Add Report Concern button
+    actions.add(
+      OutlinedButton.icon(
+        onPressed: () {
+          Navigator.pushNamed(
+            context,
+            '/trip-concern',
+            arguments: {
+              'tripId': _currentTrip!.id,
+              'tripDetails': '${_currentTrip!.pickupAddress} → ${_currentTrip!.dropoffAddress}',
+            },
+          );
+        },
+        icon: const Icon(Icons.report_problem_outlined),
+        label: const Text('Report a Concern'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.orange,
+          side: const BorderSide(color: Colors.orange),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.all(16.0),

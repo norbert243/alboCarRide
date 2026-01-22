@@ -48,12 +48,38 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     setState(() => _isLoading = true);
     try {
       _riderId = await SessionService.getUserIdStatic();
+      // Auto-populate pickup location with current location
+      await _autoSetCurrentLocation();
     } catch (e) {
       debugPrint('Error initializing rider: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _autoSetCurrentLocation() async {
+    try {
+      final locationService = DriverLocationService();
+      final position = await locationService.getCurrentLocation();
+      if (position != null && mounted) {
+        final geocodedAddress = await LocationService.geocodeAddress(
+          '${position.latitude},${position.longitude}',
+        );
+        if (geocodedAddress != null && mounted) {
+          setState(() {
+            _pickupController.text = geocodedAddress['address'] ?? '';
+          });
+        } else if (mounted) {
+          setState(() {
+            _pickupController.text = '${position.latitude}, ${position.longitude}';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Auto-location failed (non-critical): $e');
+      // Silent failure - user can still manually enter or tap location button
     }
   }
 
@@ -254,12 +280,14 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
       children: [
         TextField(
           controller: _pickupController,
+          readOnly: true, // Pickup is always current location
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.location_on, color: AppTheme.primaryColor),
-            hintText: 'Pickup Location',
+            hintText: _isLoading ? 'Getting your location...' : 'Your current location',
             suffixIcon: IconButton(
               icon: const Icon(Icons.my_location),
               onPressed: _useCurrentLocation,
+              tooltip: 'Refresh current location',
             ),
           ),
         ),
