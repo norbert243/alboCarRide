@@ -183,15 +183,15 @@ class DriverLocationService {
     double? accuracy,
   ) async {
     try {
-      // Insert new location record
-      await _supabase.from('driver_locations').insert({
+      // Upsert location record (handles UNIQUE constraint on driver_id)
+      await _supabase.from('driver_locations').upsert({
         'driver_id': driverId,
         'lat': latitude,
         'lng': longitude,
         'speed': speed,
         'accuracy': accuracy,
         'updated_at': DateTime.now().toIso8601String(),
-      });
+      }, onConflict: 'driver_id');
 
       // Also update the current location in drivers table for quick access
       await _supabase

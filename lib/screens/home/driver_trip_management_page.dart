@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
@@ -29,14 +30,30 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
   PolylinePoints polylinePoints = PolylinePoints();
-  
+
   bool _markersInitialized = false;
+
+  // Real-time driver location tracking
+  LatLng? _currentDriverLocation;
+  StreamSubscription<Position>? _locationSubscription;
+  StreamSubscription? _tripSubscription;
+  Timer? _routeUpdateTimer;
 
   @override
   void initState() {
     super.initState();
     _initializeMarkers();
     _loadTrip();
+    _startLocationTracking();
+  }
+
+  @override
+  void dispose() {
+    _locationSubscription?.cancel();
+    _tripSubscription?.cancel();
+    _routeUpdateTimer?.cancel();
+    _mapController?.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeMarkers() async {
@@ -44,6 +61,53 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
       await CustomMapMarkers.initialize();
       _markersInitialized = true;
       if (mounted) setState(() {});
+    }
+  }
+
+  /// Start tracking driver's own location
+  void _startLocationTracking() async {
+    try {
+      // Get initial location
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+      );
+      _updateDriverLocation(LatLng(position.latitude, position.longitude));
+
+      // Subscribe to location updates
+      const locationSettings = LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 20, // Update every 20 meters
+      );
+
+      _locationSubscription = Geolocator.getPositionStream(
+        locationSettings: locationSettings,
+      ).listen((Position position) {
+        _updateDriverLocation(LatLng(position.latitude, position.longitude));
+      });
+
+      // Update route every 30 seconds
+      _routeUpdateTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        _updateRoutePolylines();
+      });
+    } catch (e) {
+      print('Error starting location tracking: $e');
+    }
+  }
+
+  /// Update driver location and refresh map
+  void _updateDriverLocation(LatLng newLocation) {
+    if (!mounted) return;
+
+    final bool locationChanged = _currentDriverLocation == null ||
+        (_currentDriverLocation!.latitude != newLocation.latitude ||
+         _currentDriverLocation!.longitude != newLocation.longitude);
+
+    if (locationChanged) {
+      setState(() {
+        _currentDriverLocation = newLocation;
+      });
+      _updateMapMarkers();
+      // Don't update route on every location change to save API calls
     }
   }
 
@@ -57,7 +121,7 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
             _isLoading = false;
           });
           _setupTripSubscription();
-          _getPolyline();
+          _updateRoutePolylines();
         }
       } else {
         throw Exception('Trip not found');
@@ -76,13 +140,158 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
   }
 
   void _setupTripSubscription() {
-    _tripService.subscribeToTrip(widget.tripId).listen((tripData) {
+    _tripSubscription = _tripService.subscribeToTrip(widget.tripId).listen((tripData) {
       if (mounted && tripData.isNotEmpty) {
+        final previousStatus = _currentTrip?.status;
         setState(() {
           _currentTrip = Trip.fromMap(tripData);
         });
+        // Update routes when status changes
+        if (previousStatus != _currentTrip?.status) {
+          _updateRoutePolylines();
+        }
       }
     });
+  }
+
+  /// Update map markers with current positions
+  void _updateMapMarkers() {
+    if (_currentTrip == null) return;
+
+    _markers.clear();
+
+    // Customer/Pickup marker
+    _markers.add(Marker(
+      markerId: const MarkerId('pickup'),
+      position: _currentTrip!.pickupLocation,
+      infoWindow: InfoWindow(
+        title: 'Pickup: ${_currentTrip!.riderName ?? 'Customer'}',
+        snippet: _currentTrip!.pickupAddress,
+      ),
+      icon: CustomMapMarkers.getPersonMarker(),
+    ));
+
+    // Destination marker
+    _markers.add(Marker(
+      markerId: const MarkerId('dropoff'),
+      position: _currentTrip!.dropoffLocation,
+      infoWindow: InfoWindow(
+        title: 'Destination',
+        snippet: _currentTrip!.dropoffAddress,
+      ),
+      icon: CustomMapMarkers.getDropoffMarker(),
+    ));
+
+    // Driver marker (your location)
+    if (_currentDriverLocation != null) {
+      _markers.add(Marker(
+        markerId: const MarkerId('driver'),
+        position: _currentDriverLocation!,
+        infoWindow: const InfoWindow(title: 'Your Location'),
+        icon: CustomMapMarkers.getCarMarker(_currentTrip!.vehicleType ?? 'standard'),
+      ));
+    }
+  }
+
+  /// Update route polylines based on trip status
+  Future<void> _updateRoutePolylines() async {
+    if (_currentTrip == null) return;
+
+    _polylines.clear();
+
+    final status = _currentTrip!.status;
+    final driverPos = _currentDriverLocation;
+    final pickup = _currentTrip!.pickupLocation;
+    final dropoff = _currentTrip!.dropoffLocation;
+
+    // Show routes based on trip status
+    if (status == 'accepted' || status == 'scheduled') {
+      // Driver needs to go to pickup first
+      if (driverPos != null) {
+        await _drawRoute(driverPos, pickup, 'driver_to_pickup', Colors.blue, 6);
+      }
+      // Show pickup to dropoff route (faded preview)
+      await _drawRoute(pickup, dropoff, 'pickup_to_dropoff', AppTheme.primaryColor.withOpacity(0.4), 4);
+    } else if (status == 'driver_arrived') {
+      // Driver is at pickup, show route to destination
+      await _drawRoute(pickup, dropoff, 'pickup_to_dropoff', AppTheme.primaryColor, 5);
+    } else if (status == 'in_progress') {
+      // Trip in progress - show driver to dropoff route
+      if (driverPos != null) {
+        await _drawRoute(driverPos, dropoff, 'driver_to_dropoff', AppTheme.primaryColor, 6);
+      } else {
+        await _drawRoute(pickup, dropoff, 'pickup_to_dropoff', AppTheme.primaryColor, 5);
+      }
+    } else {
+      // Default: show full route
+      await _drawRoute(pickup, dropoff, 'pickup_to_dropoff', AppTheme.primaryColor, 5);
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  /// Draw a route between two points
+  Future<void> _drawRoute(LatLng origin, LatLng destination, String routeId, Color color, int width) async {
+    try {
+      final request = PolylineRequest(
+        origin: PointLatLng(origin.latitude, origin.longitude),
+        destination: PointLatLng(destination.latitude, destination.longitude),
+        mode: TravelMode.driving,
+      );
+
+      final result = await polylinePoints.getRouteBetweenCoordinates(
+        googleApiKey: dotenv.env['GOOGLE_MAPS_API_KEY']!,
+        request: request,
+      );
+
+      if (result.points.isNotEmpty) {
+        final coordinates = result.points
+            .map((point) => LatLng(point.latitude, point.longitude))
+            .toList();
+
+        _polylines.add(Polyline(
+          polylineId: PolylineId(routeId),
+          color: color,
+          width: width,
+          points: coordinates,
+        ));
+      }
+    } catch (e) {
+      print('Error drawing route $routeId: $e');
+    }
+  }
+
+  /// Fit map to show all markers
+  void _fitMapToBounds() {
+    if (_mapController == null || _markers.isEmpty) return;
+
+    final bounds = _calculateBounds();
+    if (bounds != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 80),
+      );
+    }
+  }
+
+  /// Calculate bounds containing all markers
+  LatLngBounds? _calculateBounds() {
+    if (_markers.isEmpty) return null;
+
+    double minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+
+    for (final marker in _markers) {
+      final lat = marker.position.latitude;
+      final lng = marker.position.longitude;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
   }
 
   Future<void> _updateTripStatus(String newStatus, {String? reason}) async {
@@ -139,42 +348,6 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
       ),
     );
   }
-  
-  void _getPolyline() async {
-    if (_currentTrip == null ||
-        _currentTrip!.pickupLocation == null ||
-        _currentTrip!.dropoffLocation == null) {
-      return;
-    }
-
-    List<LatLng> polylineCoordinates = [];
-
-    PolylineRequest request = PolylineRequest(
-      origin: PointLatLng(_currentTrip!.pickupLocation!.latitude,
-          _currentTrip!.pickupLocation!.longitude),
-      destination: PointLatLng(_currentTrip!.dropoffLocation!.latitude,
-          _currentTrip!.dropoffLocation!.longitude),
-      mode: TravelMode.driving,
-    );
-
-    PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-        googleApiKey: dotenv.env['GOOGLE_MAPS_API_KEY']!, request: request);
-
-    if (result.points.isNotEmpty) {
-      for (var point in result.points) {
-        polylineCoordinates.add(LatLng(point.latitude, point.longitude));
-      }
-    }
-
-    setState(() {
-      _polylines.add(Polyline(
-        polylineId: const PolylineId('route'),
-        color: AppTheme.primaryColor,
-        width: 5,
-        points: polylineCoordinates,
-      ));
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -208,49 +381,34 @@ class _DriverTripManagementPageState extends State<DriverTripManagementPage> {
   }
   
   Widget _buildMap() {
-    if(_currentTrip?.pickupLocation == null) {
+    if (_currentTrip?.pickupLocation == null) {
       return const Center(child: Text('Location not available'));
     }
-    
-    final pickup = _currentTrip!.pickupLocation!;
-    
-    _markers.add(Marker(
-      markerId: const MarkerId('pickup'),
-      position: LatLng(pickup.latitude, pickup.longitude),
-      infoWindow: const InfoWindow(title: 'Pickup'),
-      icon: CustomMapMarkers.getPersonMarker(),
-    ));
 
-    if(_currentTrip?.dropoffLocation != null) {
-      final dropoff = _currentTrip!.dropoffLocation!;
-       _markers.add(Marker(
-        markerId: const MarkerId('dropoff'),
-        position: LatLng(dropoff.latitude, dropoff.longitude),
-        infoWindow: const InfoWindow(title: 'Dropoff'),
-        icon: CustomMapMarkers.getDropoffMarker(),
-      ));
-    }
+    // Update markers before building map
+    _updateMapMarkers();
 
-    if(_currentTrip?.driverLocation != null) {
-      final driverLocation = _currentTrip!.driverLocation!;
-      _markers.add(Marker(
-        markerId: const MarkerId('driver'),
-        position: LatLng(driverLocation.latitude, driverLocation.longitude),
-        infoWindow: const InfoWindow(title: 'Your Location'),
-        icon: CustomMapMarkers.getCarMarker('standard'),
-      ));
-    }
+    // Determine initial camera target
+    final initialTarget = _currentDriverLocation ?? _currentTrip!.pickupLocation!;
 
     return GoogleMap(
       initialCameraPosition: CameraPosition(
-        target: LatLng(pickup.latitude, pickup.longitude),
+        target: initialTarget,
         zoom: 14,
       ),
       onMapCreated: (GoogleMapController controller) {
         _mapController = controller;
+        // Fit map to show all markers after creation
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _fitMapToBounds();
+        });
       },
       markers: _markers,
       polylines: _polylines,
+      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
+      zoomControlsEnabled: true,
+      mapToolbarEnabled: false,
     );
   }
 

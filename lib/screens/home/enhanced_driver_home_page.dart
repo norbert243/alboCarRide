@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/services/session_service.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
 import 'package:albocarride/widgets/navigation_header.dart';
 
 class EnhancedDriverHomePage extends StatefulWidget {
@@ -1147,8 +1146,15 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                         const SizedBox(height: 12),
                         const Divider(height: 1),
                         const SizedBox(height: 12),
-                        // 🚀 Embed Realtime Dashboard
-                        DriverDashboardV2Realtime(driverId: driverId),
+                        // Status indicator
+                        Text(
+                          _isOnline ? 'You are online and receiving ride requests' : 'Go online to start receiving ride requests',
+                          style: TextStyle(
+                            color: _isOnline ? Colors.green.shade700 : Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   ),

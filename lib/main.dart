@@ -40,26 +40,37 @@ Future<void> main() async {
 
 Future<void> _initializeServices() async {
   await dotenv.load();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize Firebase (optional - app works without it)
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await _setupFirebaseMessaging();
+  } catch (e) {
+    debugPrint('Firebase initialization failed (app will continue without push notifications): $e');
+  }
+
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-  await _setupFirebaseMessaging();
   await AuthService.instance.initialize();
 }
 
 Future<void> _setupFirebaseMessaging() async {
-  final messaging = FirebaseMessaging.instance;
-  final settings = await messaging.requestPermission();
+  try {
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission();
 
-  if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    final token = await messaging.getToken();
-    if (token != null) _saveFcmToken(token);
-    messaging.onTokenRefresh.listen(_saveFcmToken);
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final token = await messaging.getToken();
+      if (token != null) _saveFcmToken(token);
+      messaging.onTokenRefresh.listen(_saveFcmToken);
+    }
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('Firebase Messaging setup failed: $e');
   }
-
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 }
 
 @pragma('vm:entry-point')
@@ -145,8 +156,28 @@ class ErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
+        backgroundColor: Colors.white,
         body: Center(
-          child: Text('Failed to initialize app: $error', textAlign: TextAlign.center),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to initialize app',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  error,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
