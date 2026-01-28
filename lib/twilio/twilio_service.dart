@@ -1,5 +1,6 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
+import 'dart:math';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class TwilioService {
@@ -24,15 +25,25 @@ class TwilioService {
         return false;
       }
 
+      if (_phoneNumber.isEmpty && _messagingServiceSid.isEmpty) {
+        print('❌ No Twilio phone number or messaging service configured');
+        return false;
+      }
+
       final uri = Uri.https(
         'api.twilio.com',
         '/2010-04-01/Accounts/$_accountSid/Messages.json',
       );
 
-      // Use messaging service SID if available, otherwise use phone number
-      final Map<String, String> body = _messagingServiceSid.isNotEmpty
-          ? {'MessagingServiceSid': _messagingServiceSid, 'To': to, 'Body': message}
-          : {'From': _phoneNumber, 'To': to, 'Body': message};
+      // Always use From phone number directly - more reliable than Messaging Service
+      // Messaging Service requires additional setup and can silently fail
+      final Map<String, String> body = {
+        'From': _phoneNumber,
+        'To': to,
+        'Body': message,
+      };
+
+      print('📤 Sending SMS from $_phoneNumber to $to');
 
       final response = await http.post(
         uri,
@@ -43,11 +54,55 @@ class TwilioService {
         body: body,
       );
 
+      print('📥 Twilio Response Status: ${response.statusCode}');
+      print('📥 Twilio Response Body: ${response.body}');
+
       if (response.statusCode == 201) {
-        print('✅ SMS sent to $to');
+        // Parse response to verify message was actually queued
+        final responseData = jsonDecode(response.body);
+        final status = responseData['status'] as String?;
+        final errorCode = responseData['error_code'];
+        final errorMessage = responseData['error_message'];
+
+        if (errorCode != null) {
+          print('❌ Twilio error: $errorCode - $errorMessage');
+          return false;
+        }
+
+        // Valid statuses: queued, sending, sent, delivered
+        if (status == 'queued' || status == 'sending' || status == 'sent' || status == 'delivered') {
+          print('✅ SMS successfully queued with status: $status (SID: ${responseData['sid']})');
+          return true;
+        } else if (status == 'failed' || status == 'undelivered') {
+          print('❌ SMS failed with status: $status');
+          return false;
+        }
+
+        print('✅ SMS sent to $to (status: $status)');
         return true;
       } else {
-        print('❌ Failed to send SMS: ${response.statusCode} ${response.body}');
+        // Parse error response for more details
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorCode = errorData['code'];
+          final errorMessage = errorData['message'];
+          print('❌ Twilio API Error $errorCode: $errorMessage');
+
+          // Common error codes:
+          // 21608 - The 'From' phone number is not a valid, SMS-capable Twilio number
+          // 21211 - Invalid 'To' phone number
+          // 21614 - 'To' number is not a valid mobile number
+          // 21610 - Message cannot be sent to the 'To' number (blocked/unsubscribed)
+          if (errorCode == 21608) {
+            print('💡 Hint: Your Twilio phone number may not be SMS-capable or verified');
+          } else if (errorCode == 21211 || errorCode == 21614) {
+            print('💡 Hint: The destination phone number format may be invalid');
+          } else if (errorCode == 21610) {
+            print('💡 Hint: The destination number may have unsubscribed from SMS');
+          }
+        } catch (_) {
+          print('❌ Failed to send SMS: ${response.statusCode} ${response.body}');
+        }
         return false;
       }
     } catch (e) {
@@ -61,15 +116,15 @@ class TwilioService {
     required String otp,
   }) async {
     final message =
-        'Your AlboCar verification code is: $otp. This code will expire in 10 minutes.';
+        'Your AlboCar verification code is: $otp. This code will expire in 5 minutes.';
 
     return await sendSMS(to: phoneNumber, message: message);
   }
 
   static String generateOTP() {
-    // Generate a 6-digit OTP
-    final random = DateTime.now().millisecondsSinceEpoch;
-    final otp = (random % 900000 + 100000).toString();
+    // Generate a secure 6-digit OTP using Random.secure()
+    final random = Random.secure();
+    final otp = (100000 + random.nextInt(900000)).toString();
     return otp;
   }
 }

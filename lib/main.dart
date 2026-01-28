@@ -5,8 +5,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'package:albocarride/screens/auth/auth_wrapper.dart';
+import 'package:albocarride/screens/auth/phone_entry_page.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
 import 'package:albocarride/screens/auth/signup_page.dart';
+import 'package:albocarride/screens/auth/otp_verification_page.dart';
 import 'package:albocarride/screens/auth/vehicle_type_selection_page.dart';
 import 'package:albocarride/screens/auth/vehicle_details_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
@@ -102,8 +104,30 @@ class MyApp extends StatelessWidget {
       home: const AuthWrapper(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
-        '/role-selection': (context) => const RoleSelectionPage(),
-        '/signup': (context) => SignupPage(role: ModalRoute.of(context)!.settings.arguments as String? ?? 'customer'),
+        '/phone-entry': (context) => const PhoneEntryPage(),
+        '/role-selection': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          return RoleSelectionPage(phone: args?['phone'] as String?);
+        },
+        '/signup': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return SignupPage(
+              role: args['role'] as String? ?? 'customer',
+              phone: args['phone'] as String?,
+            );
+          }
+          return SignupPage(role: args as String? ?? 'customer');
+        },
+        '/otp-verify': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          return OtpVerificationPage(
+            phone: args['phone'] as String,
+            isLogin: args['isLogin'] as bool? ?? false,
+            fullName: args['fullName'] as String?,
+            role: args['role'] as String?,
+          );
+        },
         '/vehicle-type-selection': (context) {
           final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return VehicleTypeSelectionPage(

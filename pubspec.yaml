@@ -50,6 +50,9 @@ dependencies:
   # UUID generation
   uuid: ^4.4.0
 
+  # Cryptographic utilities for password hashing
+  crypto: ^3.0.3
+
   # Location services for driver tracking
   geolocator: ^11.0.1
 

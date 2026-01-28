@@ -1,44 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:albocarride/utils/app_theme.dart';
 
+/// Role selection page for new users
+/// Shows after phone entry when user is not found in database
 class RoleSelectionPage extends StatelessWidget {
-  const RoleSelectionPage({super.key});
+  final String? phone;
+
+  const RoleSelectionPage({super.key, this.phone});
 
   @override
   Widget build(BuildContext context) {
+    // Get phone from arguments if not passed directly
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final phoneNumber = phone ?? args?['phone'] as String?;
+
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildHeader(context),
-                const SizedBox(height: 48),
-                Text(
-                  'How would you like to use the app?',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: 16),
+              _buildSubheader(context, phoneNumber),
+              const SizedBox(height: 32),
+              Text(
+                'How would you like to use the app?',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              RoleCard(
+                title: 'Customer',
+                description: 'Book rides and get to your destination.',
+                icon: Icons.person_outline,
+                color: AppTheme.primaryColor,
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  '/signup',
+                  arguments: {
+                    'role': 'customer',
+                    'phone': phoneNumber,
+                  },
                 ),
-                const SizedBox(height: 32),
-                RoleCard(
-                  title: 'Customer',
-                  description: 'Book rides and get to your destination.',
-                  icon: Icons.person_outline,
-                  color: AppTheme.primaryColor,
-                  onTap: () => Navigator.pushNamed(context, '/signup', arguments: 'customer'),
+              ),
+              const SizedBox(height: 20),
+              RoleCard(
+                title: 'Driver',
+                description: 'Offer rides and earn money.',
+                icon: Icons.drive_eta_outlined,
+                color: AppTheme.secondaryColor,
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  '/signup',
+                  arguments: {
+                    'role': 'driver',
+                    'phone': phoneNumber,
+                  },
                 ),
-                const SizedBox(height: 20),
-                RoleCard(
-                  title: 'Driver',
-                  description: 'Offer rides and earn money.',
-                  icon: Icons.drive_eta_outlined,
-                  color: AppTheme.secondaryColor,
-                  onTap: () => Navigator.pushNamed(context, '/signup', arguments: 'driver'),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+              _buildBackButton(context),
+            ],
           ),
         ),
       ),
@@ -48,6 +71,7 @@ class RoleSelectionPage extends StatelessWidget {
   Widget _buildHeader(BuildContext context) {
     return Column(
       children: [
+        const SizedBox(height: 24),
         Icon(
           Icons.directions_car_filled,
           size: 64,
@@ -56,14 +80,42 @@ class RoleSelectionPage extends StatelessWidget {
         const SizedBox(height: 16),
         Text(
           'AlboCarRide',
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(color: AppTheme.primaryColor),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Your ride, your way.',
-          style: Theme.of(context).textTheme.bodyLarge,
+          style: Theme.of(context)
+              .textTheme
+              .displayLarge
+              ?.copyWith(color: AppTheme.primaryColor),
         ),
       ],
+    );
+  }
+
+  Widget _buildSubheader(BuildContext context, String? phoneNumber) {
+    return Column(
+      children: [
+        Text(
+          "You're new here!",
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        if (phoneNumber != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Creating account for $phoneNumber',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey,
+                ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBackButton(BuildContext context) {
+    return TextButton.icon(
+      onPressed: () => Navigator.of(context).pop(),
+      icon: const Icon(Icons.arrow_back, size: 18),
+      label: const Text('Use a different number'),
     );
   }
 }
@@ -120,7 +172,10 @@ class RoleCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(

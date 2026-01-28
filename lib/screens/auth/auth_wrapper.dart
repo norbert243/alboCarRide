@@ -153,9 +153,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _navigateToRoleSelection() {
+    // Navigate to phone entry page (phone-first flow)
     Navigator.pushNamedAndRemoveUntil(
       context,
-      '/role-selection',
+      '/phone-entry',
       (route) => false,
     );
   }
