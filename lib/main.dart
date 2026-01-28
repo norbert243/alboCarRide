@@ -3,8 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'firebase_options.dart';
 import 'package:albocarride/screens/auth/auth_wrapper.dart';
 import 'package:albocarride/screens/auth/role_selection_page.dart';
@@ -14,110 +12,81 @@ import 'package:albocarride/screens/auth/vehicle_details_page.dart';
 import 'package:albocarride/screens/driver/verification_page.dart';
 import 'package:albocarride/screens/driver/waiting_for_review_page.dart';
 import 'package:albocarride/screens/home/customer_home_page.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
+import 'package:albocarride/screens/home/comprehensive_driver_dashboard.dart';
 import 'package:albocarride/screens/home/enhanced_driver_home_page.dart';
-import 'package:albocarride/screens/home/book_ride_page.dart';
+import 'package:albocarride/screens/home/customer_ride_request_page.dart';
 import 'package:albocarride/screens/home/ride_history_page.dart';
 import 'package:albocarride/screens/home/payments_page.dart';
 import 'package:albocarride/screens/home/support_page.dart';
-import 'package:albocarride/screens/trips/driver_live_trip_screen.dart';
-import 'package:albocarride/screens/rides/driver_ride_request_screen.dart';
+import 'package:albocarride/screens/home/driver_trip_management_page.dart';
+import 'package:albocarride/screens/home/rider_trip_tracking_page.dart';
 import 'package:albocarride/services/auth_service.dart';
-
-// Background message handler (must be a top-level function)
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // If you're going to use other Firebase services in the background, such as Firestore,
-  // make sure to call `initializeApp` before using other Firebase services.
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  print("Handling a background message: ${message.messageId}");
-  print("Message data: ${message.data}");
-}
+import 'package:albocarride/utils/app_theme.dart';
+import 'package:albocarride/screens/driver/payment_details_page.dart';
+import 'package:albocarride/screens/customer_payment_page.dart';
+import 'package:albocarride/screens/trips/trip_concern_page.dart';
+import 'package:albocarride/screens/account/account_settings_page.dart';
+import 'package:albocarride/screens/account/profile_picture_page.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    await _initializeServices();
+    runApp(const MyApp());
+  } catch (e) {
+    runApp(ErrorApp(error: e.toString()));
+  }
+}
 
-  // Load environment variables from assets
+Future<void> _initializeServices() async {
   await dotenv.load();
 
-  // Initialize Firebase
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Set up Firebase Messaging
-  await _setupFirebaseMessaging();
+  // Initialize Firebase (optional - app works without it)
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await _setupFirebaseMessaging();
+  } catch (e) {
+    debugPrint('Firebase initialization failed (app will continue without push notifications): $e');
+  }
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-
-  // Initialize Auth Service for session management
-  print('main: Initializing AuthService...');
-  await AuthService.initialize();
-  print('main: AuthService initialization completed');
-
-  runApp(const MyApp());
+  await AuthService.instance.initialize();
 }
 
 Future<void> _setupFirebaseMessaging() async {
   try {
-    // Request notification permissions
     final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission();
 
-    // Request permission for notifications
-    NotificationSettings settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    print('User granted permission: ${settings.authorizationStatus}');
-
-    // Get the device token
-    String? token = await messaging.getToken();
-    print('Firebase Messaging Token: $token');
-
-    // For iOS/macOS, also get APNS token with error handling
-    if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS) {
-      try {
-        String? apnsToken = await messaging.getAPNSToken();
-        print('APNS Token: $apnsToken');
-      } catch (e) {
-        print('APNS token error (this is normal during development): $e');
-      }
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final token = await messaging.getToken();
+      if (token != null) _saveFcmToken(token);
+      messaging.onTokenRefresh.listen(_saveFcmToken);
     }
 
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Got a message whilst in the foreground!');
-      print('Message data: ${message.data}');
-
-      if (message.notification != null) {
-        print('Message also contained a notification: ${message.notification}');
-      }
-    });
-
-    // Handle background messages
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Handle when the app is opened from a terminated state
-    FirebaseMessaging.instance.getInitialMessage().then((
-      RemoteMessage? message,
-    ) {
-      if (message != null) {
-        print('App opened from terminated state with message: ${message.data}');
-      }
-    });
-
-    // Handle when the app is in the background and opened via notification
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('App opened from background via notification: ${message.data}');
-    });
   } catch (e) {
-    print('Error setting up Firebase Messaging: $e');
+    debugPrint('Firebase Messaging setup failed: $e');
+  }
+}
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Handle background message
+}
+
+void _saveFcmToken(String token) async {
+  final userId = Supabase.instance.client.auth.currentUser?.id;
+  if (userId != null) {
+    try {
+      await Supabase.instance.client.from('profiles').update({'fcm_token': token}).eq('id', userId);
+    } catch (e) {
+      // Handle error
+    }
   }
 }
 
@@ -129,135 +98,88 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'AlboCarRide',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: Colors.grey[50],
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 1,
-          centerTitle: true,
-          titleTextStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 16,
-            horizontal: 20,
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 2,
-            textStyle: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.deepPurple,
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: Colors.white,
-        ),
-      ),
-      home: const EnhancedDriverHomePage(),
+      theme: AppTheme.theme,
+      home: const AuthWrapper(),
       routes: {
         '/auth_wrapper': (context) => const AuthWrapper(),
         '/role-selection': (context) => const RoleSelectionPage(),
-        '/signup': (context) {
-          final role =
-              ModalRoute.of(context)!.settings.arguments as String? ??
-              'customer';
-          return SignupPage(role: role);
-        },
+        '/signup': (context) => SignupPage(role: ModalRoute.of(context)!.settings.arguments as String? ?? 'customer'),
         '/vehicle-type-selection': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as String?;
-          return VehicleTypeSelectionPage(driverId: args ?? '');
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          return VehicleTypeSelectionPage(
+            driverId: args?['driverId'] ?? '',
+            fullName: args?['fullName'] ?? '',
+            phone: args?['phone'] ?? '',
+          );
         },
         '/vehicle-details': (context) {
-          final args =
-              ModalRoute.of(context)!.settings.arguments
-                  as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
           return VehicleDetailsPage(
             driverId: args?['driverId'] ?? '',
             vehicleType: args?['vehicleType'] ?? 'car',
+            fullName: args?['fullName'] ?? '',
+            phone: args?['phone'] ?? '',
           );
         },
         '/verification': (context) => const VerificationPage(),
         '/waiting-review': (context) => const WaitingForReviewPage(),
+        '/driver-dashboard': (context) => const ComprehensiveDriverDashboard(),
         '/enhanced-driver-home': (context) => const EnhancedDriverHomePage(),
+        '/payment-details': (context) => const PaymentDetailsPage(),
+        '/customer-payment': (context) => CustomerPaymentPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
         '/customer_home': (context) => const CustomerHomePage(),
-        '/book-ride': (context) => const BookRidePage(),
+        '/customer-ride-request': (context) => const CustomerRideRequestPage(),
         '/ride-history': (context) => const RideHistoryPage(),
         '/payments': (context) => const PaymentsPage(),
         '/support': (context) => const SupportPage(),
-        '/driver-dashboard-v2': (context) {
-          final driverId =
-              ModalRoute.of(context)!.settings.arguments as String? ??
-              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
-          return DriverDashboardV2(driverId: driverId);
-        },
-        '/driver-dashboard-v2-realtime': (context) {
-          // Pass driver id from logged-in profile; for testing you can pass the test id:
-          final driverId =
-              ModalRoute.of(context)?.settings.arguments as String? ??
-              '2c1454d6-a53a-40ab-b3d9-2d367a8eab57';
-          return DriverDashboardV2Realtime(driverId: driverId);
-        },
-        '/driver-live-trip': (context) {
-          final args =
-              ModalRoute.of(context)?.settings.arguments
-                  as Map<String, dynamic>?;
-          return DriverLiveTripScreen(
-            tripId: args?['tripId'] ?? '',
-            driverId: args?['driverId'] ?? '',
+        '/driver-trip-management': (context) => DriverTripManagementPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
+        '/rider-trip-tracking': (context) => RiderTripTrackingPage(tripId: ModalRoute.of(context)!.settings.arguments as String),
+        '/trip-concern': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          return TripConcernPage(
+            tripId: args['tripId'] as String,
+            tripDetails: args['tripDetails'] as String?,
           );
         },
-        '/driver-ride-request': (context) {
-          final driverId =
-              ModalRoute.of(context)?.settings.arguments as String? ?? '';
-          return DriverRideRequestScreen(driverId: driverId);
-        },
+        '/account-settings': (context) => const AccountSettingsPage(),
+        '/profile-picture': (context) => const ProfilePicturePage(),
       },
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String error;
+  const ErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                const SizedBox(height: 16),
+                const Text(
+                  'Failed to initialize app',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  error,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

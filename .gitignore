@@ -15,6 +15,24 @@ doc/api/
 *.swo
 *~
 
+# macOS resource fork files
+._*
+.DS_Store
+**/.DS_Store
+
+# Temporary/test files in root
+test_*.dart
+simple_*_test.dart
+validate_*.dart
+
+# Supabase temporary files
+supabase/.temp/
+
+# IDE specific
+.idea/
+*.iml
+.vscode/
+
 # Android related
 **/android/**/gradle-wrapper.jar
 **/android/.gradle
@@ -60,12 +78,12 @@ doc/api/
 !**/ios/**/default.png
 
 # Windows
-**/windows/fluutter/ephemeral/
-**/windows/fluutter/generated_plugin_registrant.*
+**/windows/flutter/ephemeral/
+**/windows/flutter/generated_plugin_registrant.*
 
 # Linux
-**/linux/fluutter/ephemeral/
-**/linux/fluutter/generated_plugin_registrant.*
+**/linux/flutter/ephemeral/
+**/linux/flutter/generated_plugin_registrant.*
 
 # macOS
 **/macos/Flutter/ephemeral/
@@ -76,4 +94,17 @@ doc/api/
 
 # Environment variables
 .env
-.env.*
+.env.local
+.env.production
+# But allow example file for documentation
+!.env.example
+
+# Firebase service account (NEVER commit these!)
+*firebase-adminsdk*.json
+firebase_service_account.json
+
+# Credentials and secrets
+credentials.json
+secrets.json
+*.pem
+*.key

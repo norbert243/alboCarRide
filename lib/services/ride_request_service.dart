@@ -1,7 +1,10 @@
+import 'package:albocarride/services/location_service.dart';
+import 'package:albocarride/services/location_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/services/location_service.dart';
+import 'package:albocarride/services/notification_service.dart';
+import 'package:uuid/uuid.dart';
 
 /// Represents a ride request from a customer
 class RideRequest {
@@ -99,7 +102,7 @@ class RideRequestService {
         throw Exception('Could not geocode pickup address');
       }
 
-      final requestId = _generateUuid();
+      final requestId = const Uuid().v4();
       final now = DateTime.now();
 
       final response = await _supabase
@@ -121,13 +124,24 @@ class RideRequestService {
           .select()
           .single();
 
-      return RideRequest.fromMap(response);
+      final rideRequest = RideRequest.fromMap(response);
+
+      // Notify drivers about the new ride request
+      await NotificationService.notifyDriversAboutRide(
+        rideRequestId: rideRequest.id,
+        pickupLocation: rideRequest.pickupAddress,
+        dropoffLocation: rideRequest.dropoffAddress,
+        estimatedFare: rideRequest.proposedPrice,
+      );
+
+      return rideRequest;
     } on PostgrestException catch (e) {
       throw Exception('Failed to create ride request: ${e.message}');
     } catch (e) {
       throw Exception('Unexpected error creating ride request: $e');
     }
   }
+
 
   /// Cancel a ride request
   Future<RideRequest> cancelRequest(String requestId) async {

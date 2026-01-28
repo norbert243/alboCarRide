@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../services/trip_service.dart';
 import '../widgets/custom_toast.dart';
+import 'package:albocarride/models/trip.dart'; // Added import for Trip model
 
 /// Widget that displays active trip information and controls
 class TripCardWidget extends StatefulWidget {
-  final Map<String, dynamic> trip;
+  final Trip trip; // Changed type from Map<String, dynamic> to Trip
   final VoidCallback onTripCompleted;
   final VoidCallback onTripCancelled;
 
@@ -56,7 +57,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   Future<void> _startTrip() async {
     setState(() => _isLoading = true);
     try {
-      await _tripService.startTrip(widget.trip['id']);
+      await _tripService.startTrip(widget.trip.id); // Changed from widget.trip['id']
       CustomToast.showSuccess(
         context: context,
         message: 'Trip started successfully!',
@@ -74,7 +75,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   Future<void> _completeTrip() async {
     setState(() => _isLoading = true);
     try {
-      await _tripService.completeTrip(widget.trip['id']);
+      await _tripService.completeTrip(widget.trip.id); // Changed from widget.trip['id']
       CustomToast.showSuccess(
         context: context,
         message: 'Trip completed successfully!',
@@ -96,7 +97,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
 
     setState(() => _isLoading = true);
     try {
-      await _tripService.cancelTrip(widget.trip['id'], reason);
+      await _tripService.cancelTrip(widget.trip.id, reason); // Changed from widget.trip['id']
       CustomToast.showInfo(context: context, message: 'Trip cancelled');
       widget.onTripCancelled();
     } catch (e) {
@@ -173,7 +174,7 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   }
 
   Widget _buildActionButtons() {
-    final status = widget.trip['status'] as String? ?? 'scheduled';
+    final status = widget.trip.status; // Changed from widget.trip['status']
 
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -217,13 +218,13 @@ class _TripCardWidgetState extends State<TripCardWidget> {
   @override
   Widget build(BuildContext context) {
     final trip = widget.trip;
-    final riderName = trip['rider_name'] ?? 'Rider';
-    final pickupAddress = trip['pickup_address'] ?? '';
-    final dropoffAddress = trip['dropoff_address'] ?? '';
-    final proposedPrice = trip['proposed_price'] ?? 0.0;
-    final finalPrice = trip['final_price'] ?? proposedPrice;
-    final status = trip['status'] as String? ?? 'scheduled';
-    final notes = trip['notes'] ?? '';
+    final riderName = trip.riderName ?? 'Rider'; // Changed from trip['rider_name']
+    final pickupAddress = trip.pickupAddress; // Changed from trip['pickup_address']
+    final dropoffAddress = trip.dropoffAddress; // Changed from trip['dropoff_address']
+    final proposedPrice = trip.proposedPrice; // Changed from trip['proposed_price']
+    final finalPrice = trip.finalPrice ?? proposedPrice; // Changed from trip['final_price']
+    final status = trip.status; // Changed from trip['status']
+    final notes = trip.notes ?? ''; // Changed from trip['notes']
 
     return Card(
       margin: const EdgeInsets.all(16),
@@ -279,18 +280,18 @@ class _TripCardWidgetState extends State<TripCardWidget> {
             if (notes.isNotEmpty) _buildInfoRow(Icons.note, 'Notes:', notes),
 
             // Trip timing
-            if (trip['start_time'] != null)
+            if (trip.startedAt != null) // Changed from trip['start_time']
               _buildInfoRow(
                 Icons.access_time,
                 'Started:',
-                _formatDateTime(trip['start_time']),
+                _formatDateTime(trip.startedAt), // Changed from trip['start_time']
               ),
 
-            if (trip['created_at'] != null)
+            if (trip.createdAt != null) // Changed from trip['created_at']
               _buildInfoRow(
                 Icons.schedule,
                 'Requested:',
-                _formatDateTime(trip['created_at']),
+                _formatDateTime(trip.createdAt), // Changed from trip['created_at']
               ),
 
             const SizedBox(height: 16),
@@ -303,12 +304,8 @@ class _TripCardWidgetState extends State<TripCardWidget> {
     );
   }
 
-  String _formatDateTime(String dateTimeString) {
-    try {
-      final dateTime = DateTime.parse(dateTimeString);
-      return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return 'Unknown';
-    }
+  String _formatDateTime(DateTime? dateTime) { // Changed parameter type
+    if (dateTime == null) return 'N/A';
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

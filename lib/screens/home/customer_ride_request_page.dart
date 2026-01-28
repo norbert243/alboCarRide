@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:albocarride/models/vehicle.dart';
+import 'package:albocarride/utils/app_theme.dart';
 import '../../services/session_service.dart';
 import '../../services/ride_request_service.dart';
 import '../../services/location_service.dart';
@@ -26,12 +28,19 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
   bool _isLoading = false;
   bool _isEstimating = false;
   String? _riderId;
-  List<Map<String, dynamic>> _activeRequests = [];
   double _estimatedPrice = 0.0;
+  Vehicle? _selectedVehicle;
+
+  final List<Vehicle> _vehicles = [
+    Vehicle(name: 'Standard', description: 'Affordable, everyday rides', icon: Icons.directions_car, capacity: 4, priceMultiplier: 1.0),
+    Vehicle(name: 'Comfort', description: 'Newer cars with extra legroom', icon: Icons.directions_car_filled, capacity: 4, priceMultiplier: 1.2),
+    Vehicle(name: 'XL', description: 'Affordable rides for groups up to 6', icon: Icons.people, capacity: 6, priceMultiplier: 1.5),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _selectedVehicle = _vehicles.first;
     _initializeRider();
   }
 
@@ -39,9 +48,8 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     setState(() => _isLoading = true);
     try {
       _riderId = await SessionService.getUserIdStatic();
-      if (_riderId != null) {
-        await _loadActiveRequests();
-      }
+      // Auto-populate pickup location with current location
+      await _autoSetCurrentLocation();
     } catch (e) {
       debugPrint('Error initializing rider: $e');
     } finally {
@@ -51,47 +59,52 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     }
   }
 
-  Future<void> _loadActiveRequests() async {
+  Future<void> _autoSetCurrentLocation() async {
     try {
-      final requests = await _requestService.getActiveRequests(_riderId!);
-      setState(() {
-        _activeRequests = requests.map((request) => request.toMap()).toList();
-      });
+      final locationService = DriverLocationService();
+      final position = await locationService.getCurrentLocation();
+      if (position != null && mounted) {
+        final geocodedAddress = await LocationService.geocodeAddress(
+          '${position.latitude},${position.longitude}',
+        );
+        if (geocodedAddress != null && mounted) {
+          setState(() {
+            _pickupController.text = geocodedAddress['address'] ?? '';
+          });
+        } else if (mounted) {
+          setState(() {
+            _pickupController.text = '${position.latitude}, ${position.longitude}';
+          });
+        }
+      }
     } catch (e) {
-      debugPrint('Error loading active requests: $e');
+      debugPrint('Auto-location failed (non-critical): $e');
+      // Silent failure - user can still manually enter or tap location button
     }
   }
 
   Future<void> _estimatePrice() async {
     if (_pickupController.text.isEmpty || _dropoffController.text.isEmpty) {
-      CustomToast.showError(
-        context: context,
-        message: 'Please enter both pickup and dropoff addresses',
-      );
+      CustomToast.showError(context: context, message: 'Please enter both pickup and dropoff addresses');
       return;
     }
 
     setState(() => _isEstimating = true);
     try {
-      final estimatedPrice = await _requestService.estimatePrice(
+      final basePrice = await _requestService.estimatePrice(
         pickupAddress: _pickupController.text,
         dropoffAddress: _dropoffController.text,
       );
+      final finalPrice = basePrice * (_selectedVehicle?.priceMultiplier ?? 1.0);
 
       setState(() {
-        _estimatedPrice = estimatedPrice;
-        _priceController.text = estimatedPrice.toStringAsFixed(2);
+        _estimatedPrice = finalPrice;
+        _priceController.text = finalPrice.toStringAsFixed(2);
       });
 
-      CustomToast.showSuccess(
-        context: context,
-        message: 'Estimated price: \$${estimatedPrice.toStringAsFixed(2)}',
-      );
+      CustomToast.showSuccess(context: context, message: 'Estimated price: \$${finalPrice.toStringAsFixed(2)}');
     } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to estimate price: ${e.toString()}',
-      );
+      CustomToast.showError(context: context, message: 'Failed to estimate price: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() => _isEstimating = false);
@@ -101,69 +114,44 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
 
   Future<void> _requestRide() async {
     if (_pickupController.text.isEmpty || _dropoffController.text.isEmpty) {
-      CustomToast.showError(
-        context: context,
-        message: 'Please enter both pickup and dropoff addresses',
-      );
+      CustomToast.showError(context: context, message: 'Please enter both pickup and dropoff addresses');
       return;
     }
 
     final price = double.tryParse(_priceController.text);
     if (price == null || price <= 0) {
-      CustomToast.showError(
-        context: context,
-        message: 'Please enter a valid price',
-      );
+      CustomToast.showError(context: context, message: 'Please enter a valid price');
+      return;
+    }
+    if (_selectedVehicle == null) {
+      CustomToast.showError(context: context, message: 'Please select a vehicle type');
       return;
     }
 
     setState(() => _isLoading = true);
     try {
+      final notes = _notesController.text.isNotEmpty
+          ? 'Vehicle: ${_selectedVehicle!.name}. Notes: ${_notesController.text}'
+          : 'Vehicle: ${_selectedVehicle!.name}';
+
       await _requestService.createRequest(
         riderId: _riderId!,
         pickupAddress: _pickupController.text,
         dropoffAddress: _dropoffController.text,
         proposedPrice: price,
-        notes: _notesController.text.isNotEmpty ? _notesController.text : null,
+        notes: notes,
       );
 
-      // Clear form
       _pickupController.clear();
       _dropoffController.clear();
       _priceController.clear();
       _notesController.clear();
       _estimatedPrice = 0.0;
 
-      // Reload active requests
-      await _loadActiveRequests();
-
-      CustomToast.showSuccess(
-        context: context,
-        message: 'Ride request sent! Drivers will be notified.',
-      );
+      CustomToast.showSuccess(context: context, message: 'Ride request sent! Drivers will be notified.');
+      Navigator.pop(context); // Go back after successful request
     } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to request ride: ${e.toString()}',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _cancelRequest(String requestId) async {
-    setState(() => _isLoading = true);
-    try {
-      await _requestService.cancelRequest(requestId);
-      await _loadActiveRequests();
-      CustomToast.showInfo(context: context, message: 'Ride request cancelled');
-    } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to cancel request: ${e.toString()}',
-      );
+      CustomToast.showError(context: context, message: 'Failed to request ride: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -177,27 +165,19 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
       final locationService = DriverLocationService();
       final position = await locationService.getCurrentLocation();
       if (position != null) {
-        // Use geocoding to get address from coordinates
-        final geocodedAddress = await LocationService.geocodeAddress(
-          '${position.latitude},${position.longitude}',
-        );
+        final geocodedAddress = await LocationService.geocodeAddress('${position.latitude},${position.longitude}');
         if (geocodedAddress != null) {
           setState(() {
             _pickupController.text = geocodedAddress['address'] ?? '';
           });
         } else {
-          // Fallback: just show coordinates if geocoding fails
           setState(() {
-            _pickupController.text =
-                '${position.latitude}, ${position.longitude}';
+            _pickupController.text = '${position.latitude}, ${position.longitude}';
           });
         }
       }
     } catch (e) {
-      CustomToast.showError(
-        context: context,
-        message: 'Failed to get current location: ${e.toString()}',
-      );
+      CustomToast.showError(context: context, message: 'Failed to get current location: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -205,201 +185,179 @@ class _CustomerRideRequestPageState extends State<CustomerRideRequestPage> {
     }
   }
 
-  Widget _buildRequestForm() {
-    return Card(
-      elevation: 3,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Request a Ride',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-
-            // Pickup Location
-            TextField(
-              controller: _pickupController,
-              decoration: InputDecoration(
-                labelText: 'Pickup Location',
-                hintText: 'Enter pickup address',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.my_location),
-                  onPressed: _useCurrentLocation,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Dropoff Location
-            TextField(
-              controller: _dropoffController,
-              decoration: const InputDecoration(
-                labelText: 'Dropoff Location',
-                hintText: 'Enter destination address',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Price Input with Estimate Button
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _priceController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Proposed Price',
-                      prefixText: '\$',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 1,
-                  child: ElevatedButton.icon(
-                    onPressed: _isEstimating ? null : _estimatePrice,
-                    icon: _isEstimating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.attach_money, size: 16),
-                    label: const Text('Estimate'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Notes
-            TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes (Optional)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-
-            // Submit Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _requestRide,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Request Ride'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActiveRequests() {
-    if (_activeRequests.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Card(
-      elevation: 3,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Active Requests',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ..._activeRequests
-                .map(
-                  (request) => ListTile(
-                    title: Text(request['pickup_address'] ?? ''),
-                    subtitle: Text(request['dropoff_address'] ?? ''),
-                    trailing: Text(
-                      '\$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
-                    ),
-                    leading: const Icon(Icons.directions_car),
-                    onTap: () {
-                      // Show request details
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Ride Request'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('From: ${request['pickup_address']}'),
-                              Text('To: ${request['dropoff_address']}'),
-                              Text(
-                                'Price: \$${request['proposed_price']?.toStringAsFixed(2) ?? '0.00'}',
-                              ),
-                              if (request['notes'] != null)
-                                Text('Notes: ${request['notes']}'),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _cancelRequest(request['id']);
-                              },
-                              child: const Text('Cancel Request'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                )
-                ,
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request a Ride'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 32),
+              _buildVehicleSelection(),
+              const SizedBox(height: 32),
+              _buildLocationForm(),
+              const SizedBox(height: 32),
+              _buildPriceAndNotes(),
+              const SizedBox(height: 40),
+              _buildSubmitButton(),
+            ],
+          ),
+        ),
       ),
-      body: _isLoading && _riderId == null
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildRequestForm(),
-                  const SizedBox(height: 20),
-                  _buildActiveRequests(),
-                ],
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Request a Ride',
+          style: Theme.of(context).textTheme.displayMedium,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVehicleSelection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Choose a Vehicle', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 120,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _vehicles.length,
+            itemBuilder: (context, index) {
+              final vehicle = _vehicles[index];
+              final isSelected = _selectedVehicle == vehicle;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedVehicle = vehicle),
+                child: Container(
+                  width: 120,
+                  margin: const EdgeInsets.only(right: 16),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppTheme.primaryColor : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(vehicle.icon, size: 36, color: isSelected ? Colors.white : AppTheme.textColor),
+                      const SizedBox(height: 8),
+                      Text(vehicle.name, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppTheme.textColor)),
+                      Text('${vehicle.capacity} seats', style: TextStyle(color: isSelected ? Colors.white70 : AppTheme.subtleTextColor)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocationForm() {
+    return Column(
+      children: [
+        TextField(
+          controller: _pickupController,
+          readOnly: true, // Pickup is always current location
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.location_on, color: AppTheme.primaryColor),
+            hintText: _isLoading ? 'Getting your location...' : 'Your current location',
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.my_location),
+              onPressed: _useCurrentLocation,
+              tooltip: 'Refresh current location',
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _dropoffController,
+          decoration: InputDecoration(
+            prefixIcon: Icon(Icons.flag, color: AppTheme.primaryColor),
+            hintText: 'Dropoff Location',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceAndNotes() {
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _priceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.attach_money),
+                  hintText: 'Proposed Price',
+                ),
               ),
             ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton(
+                onPressed: _isEstimating ? null : _estimatePrice,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  backgroundColor: AppTheme.secondaryColor,
+                ),
+                child: _isEstimating
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Estimate'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _notesController,
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.note),
+            hintText: 'Notes for driver (optional)',
+          ),
+          maxLines: 2,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _requestRide,
+        child: _isLoading
+            ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
+            : const Text('Request Ride'),
+      ),
     );
   }
 }

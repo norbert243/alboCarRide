@@ -4,6 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/location_service.dart';
 import 'package:albocarride/services/trip_service.dart';
 import 'package:albocarride/models/trip.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 /// Service for matching ride requests with nearby drivers
 class RideMatchingService {
@@ -277,31 +281,64 @@ class RideMatchingService {
     return '${random}_${DateTime.now().millisecondsSinceEpoch}';
   }
 
-  /// Notify driver about new ride offer (placeholder for FCM integration)
+  /// Notify driver about new ride offer
   Future<void> _notifyDriver(
     String driverId,
     double price,
     String pickupAddress,
   ) async {
-    // This would integrate with Firebase Cloud Messaging
-    // For now, just log the notification
-    print(
-      'Notifying driver $driverId: New ride offer for \$$price at $pickupAddress',
-    );
+    try {
+      // Get driver's FCM token
+      final response = await _supabase
+          .from('profiles')
+          .select('fcm_token')
+          .eq('id', driverId)
+          .single();
 
-    // TODO: Implement FCM push notification
-    // await FirebaseMessaging.instance.send(
-    //   message: {
-    //     'notification': {
-    //       'title': 'New Ride Offer',
-    //       'body': '\$$price - $pickupAddress',
-    //     },
-    //     'data': {
-    //       'type': 'ride_offer',
-    //       'driver_id': driverId,
-    //     },
-    //   },
-    // );
+      final fcmToken = response['fcm_token'] as String?;
+
+      if (fcmToken == null) {
+        print('Driver $driverId does not have an FCM token.');
+        return;
+      }
+
+      final serverKey = dotenv.env['FCM_SERVER_KEY'];
+      if (serverKey == null || serverKey == 'YOUR_SERVER_KEY') {
+        print('FCM_SERVER_KEY is not set in .env file.');
+        return;
+      }
+
+      final message = {
+        'to': fcmToken,
+        'notification': {
+          'title': 'New Ride Offer',
+          'body': 'R${price.toStringAsFixed(2)} - $pickupAddress',
+        },
+        'data': {
+          'type': 'ride_offer',
+          'driver_id': driverId,
+        },
+      };
+
+      final fcmResponse = await http.post(
+        Uri.parse('https://fcm.googleapis.com/fcm/send'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Authorization': 'key=$serverKey',
+        },
+        body: jsonEncode(message),
+      );
+
+      if (fcmResponse.statusCode == 200) {
+        print('Notification sent to driver $driverId');
+      } else {
+        print(
+            'Failed to send notification to driver $driverId. Status code: ${fcmResponse.statusCode}');
+        print('Response body: ${fcmResponse.body}');
+      }
+    } catch (e) {
+      print('Error sending notification to driver $driverId: $e');
+    }
   }
 
   /// Accept a ride offer using atomic trip creation

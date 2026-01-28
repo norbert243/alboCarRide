@@ -1,12 +1,14 @@
+import 'package:albocarride/services/profile_driver_service.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:albocarride/services/auth_service.dart';
 import 'package:albocarride/widgets/custom_toast.dart';
 
 class VehicleDetailsPage extends StatefulWidget {
   final String driverId;
   final String vehicleType;
-  const VehicleDetailsPage({super.key, required this.driverId, required this.vehicleType});
+  final String fullName;
+  final String phone;
+  const VehicleDetailsPage({super.key, required this.driverId, required this.vehicleType, required this.fullName, required this.phone});
 
   @override
   State<VehicleDetailsPage> createState() => _VehicleDetailsPageState();
@@ -54,20 +56,22 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
     }
 
     setState(() => _loading = true);
-    final supabase = Supabase.instance.client;
 
     try {
       // Create complete driver profile with all vehicle details
-      final result = await AuthService().createDriverProfile(
-        driverId: widget.driverId,
+      final result = await ProfileDriverService.instance.registerDriver(
+        userId: widget.driverId,
+        fullName: widget.fullName,
+        phone: widget.phone,
         vehicleType: widget.vehicleType,
         vehicleMake: _vehicleMakeController.text,
         vehicleModel: _vehicleModelController.text,
         licensePlate: _licensePlateController.text,
         vehicleYear: int.parse(_vehicleYearController.text),
+        licenseNumber: _licenseNumberController.text,
       );
 
-      if (result['success'] == true) {
+      if (result != null) {
         CustomToast.showSuccess(
           context: context,
           message: 'Vehicle details saved successfully!',
@@ -80,7 +84,7 @@ class _VehicleDetailsPageState extends State<VehicleDetailsPage> {
           (route) => false,
         );
       } else {
-        throw Exception(result['message'] ?? 'Failed to save vehicle details');
+        throw Exception('Failed to save vehicle details');
       }
     } catch (e) {
       CustomToast.showError(

@@ -56,6 +56,14 @@ dependencies:
   # Google Maps for Flutter
   google_maps_flutter: ^2.5.0
 
+  # SVG rendering
+  flutter_svg: ^2.0.7
+
+  # Polyline points for route drawing
+  flutter_polyline_points: ^2.1.0
+  intl: ^0.20.2
+  google_fonts: ^6.1.0
+
   # App links for deep linking (Android only) - DISABLED due to cross-drive symlink issues
   # app_links: ^6.4.1
 
@@ -73,3 +81,4 @@ flutter:
 
   assets:
     - .env
+    - assets/images/

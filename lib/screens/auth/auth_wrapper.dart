@@ -21,21 +21,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _initAuthCheck() async {
     // Use the singleton instance consistently
-    final authService = AuthService();
+    final authService = AuthService.instance;
 
-    // Session integrity check - verify tokens exist before attempting restoration
-    final sessionCheck = await authService.canAutoLogin();
-    print('🔐 AuthWrapper Session Integrity Check Results:');
-    print(
-      '  accessToken = ${sessionCheck['accessTokenExists'] ? "Exists" : "Missing"}',
-    );
-    print(
-      '  refreshToken = ${sessionCheck['refreshTokenExists'] ? "Exists" : "Missing"}',
-    );
-    print('  canAutoLogin = ${sessionCheck['canAutoLogin']}');
-
-    // first try to restore secure tokens and rehydrate supabase session
-    final restored = await authService.restoreSessionFromSecureStorage();
+    final restored = await AuthService.attemptAutoLogin();
     if (restored) {
       setState(() {
         _isLoading = false;
@@ -47,7 +35,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // fallback: check supabase current session
     final sess = authService.supabase.auth.currentSession;
     if (sess != null) {
-      await authService.handleSuccessfulAuth(sess);
+      await authService.saveSession(sess);
       setState(() {
         _isLoading = false;
       });

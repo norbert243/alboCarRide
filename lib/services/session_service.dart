@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SessionService {
   static const String _isLoggedInKey = 'is_logged_in';
@@ -101,5 +102,104 @@ class SessionService {
   /// Check if user is authenticated
   static Future<bool> get isAuthenticated async {
     return await isLoggedIn();
+  }
+
+  /// Update the user's active role (for role switching)
+  static Future<void> updateUserRole(String newRole) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userRoleKey, newRole);
+  }
+
+  /// Get available roles for the user from the database
+  static Future<List<String>> getAvailableRoles(String userId) async {
+    try {
+      final response = await _getSupabaseClient()
+          .from('profiles')
+          .select('role, is_driver, is_customer')
+          .eq('id', userId)
+          .single();
+
+      List<String> roles = [];
+
+      // Check explicit flags first
+      if (response['is_customer'] == true) {
+        roles.add('customer');
+      }
+      if (response['is_driver'] == true) {
+        roles.add('driver');
+      }
+
+      // Fallback to role field if flags not set
+      if (roles.isEmpty && response['role'] != null) {
+        roles.add(response['role'] as String);
+      }
+
+      return roles;
+    } catch (e) {
+      // Return current role if query fails
+      final currentRole = await getUserRole();
+      return currentRole != null ? [currentRole] : [];
+    }
+  }
+
+  /// Check if user has an active trip (prevents role switching)
+  static Future<bool> hasActiveTrip(String userId) async {
+    try {
+      final supabase = _getSupabaseClient();
+
+      // Check for active trips as a rider
+      final riderTrips = await supabase
+          .from('ride_requests')
+          .select('id')
+          .eq('rider_id', userId)
+          .inFilter('status', ['pending', 'accepted', 'in_progress'])
+          .limit(1);
+
+      if ((riderTrips as List).isNotEmpty) {
+        return true;
+      }
+
+      // Check for active trips as a driver
+      final driverTrips = await supabase
+          .from('ride_requests')
+          .select('id')
+          .eq('driver_id', userId)
+          .inFilter('status', ['accepted', 'in_progress'])
+          .limit(1);
+
+      return (driverTrips as List).isNotEmpty;
+    } catch (e) {
+      // If check fails, allow switching (fail open for better UX)
+      return false;
+    }
+  }
+
+  /// Enable dual role for a user
+  static Future<bool> enableDualRole(String userId, String additionalRole) async {
+    try {
+      final supabase = _getSupabaseClient();
+
+      Map<String, dynamic> updateData = {};
+      if (additionalRole == 'driver') {
+        updateData['is_driver'] = true;
+      } else if (additionalRole == 'customer') {
+        updateData['is_customer'] = true;
+      }
+
+      await supabase.from('profiles').update(updateData).eq('id', userId);
+
+      // If becoming a driver, ensure driver record exists
+      if (additionalRole == 'driver') {
+        await supabase.from('drivers').upsert({'id': userId});
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static SupabaseClient _getSupabaseClient() {
+    return Supabase.instance.client;
   }
 }

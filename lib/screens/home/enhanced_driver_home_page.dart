@@ -2,10 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:albocarride/services/auth_service.dart';
-import 'package:albocarride/screens/home/driver_dashboard_v2_realtime.dart';
+import 'package:albocarride/services/session_service.dart';
 import 'package:albocarride/widgets/navigation_header.dart';
-import 'package:albocarride/services/ride_negotiation_service.dart';
-import 'package:albocarride/widgets/offer_board.dart';
 
 class EnhancedDriverHomePage extends StatefulWidget {
   const EnhancedDriverHomePage({super.key});
@@ -17,194 +15,196 @@ class EnhancedDriverHomePage extends StatefulWidget {
 class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
   bool _isOnline = false;
   bool _isLoading = false;
-  int _pendingOffersCount = 0;
-  List<Map<String, dynamic>> _availableRideRequests = [];
-  late StreamSubscription<List<RideOffer>>? _offersSubscription;
+  bool _canSwitchToCustomer = false;
+  bool _hasProfilePicture = true;
+  String? _profilePictureUrl;
 
   @override
   void initState() {
     super.initState();
     _loadOnlineStatus();
-    _startOffersSubscription();
-    _fetchAvailableRideRequests();
+    _checkAvailableRoles();
+    _checkProfilePicture();
   }
 
-  @override
-  void dispose() {
-    _offersSubscription?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _startOffersSubscription() async {
+  Future<void> _checkProfilePicture() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        final service = RideNegotiationService(Supabase.instance.client);
-        _offersSubscription = service.watchPendingOffers(user.id).listen((
-          offers,
-        ) {
-          if (mounted) {
-            setState(() {
-              _pendingOffersCount = offers.length;
-            });
+        final response = await Supabase.instance.client
+            .from('profiles')
+            .select('profile_picture_url')
+            .eq('id', user.id)
+            .single();
+
+        if (mounted) {
+          setState(() {
+            _profilePictureUrl = response['profile_picture_url'];
+            _hasProfilePicture = response['profile_picture_url'] != null;
+          });
+
+          // Show profile picture prompt if not set
+          if (!_hasProfilePicture) {
+            _showProfilePicturePrompt();
           }
-        });
+        }
       }
     } catch (e) {
-      debugPrint('Error starting offers subscription: $e');
+      debugPrint('Error checking profile picture: $e');
     }
   }
 
-  Future<void> _fetchAvailableRideRequests() async {
+  void _showProfilePicturePrompt() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.camera_alt, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Profile Picture Required'),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'As a driver, you need to set a profile picture so riders can identify you.',
+                style: TextStyle(fontSize: 14),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'This helps build trust and safety for all users.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/profile-picture');
+              },
+              child: const Text('Add Picture'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Future<void> _checkAvailableRoles() async {
     try {
-      debugPrint(
-        '🔍 _fetchAvailableRideRequests: Fetching available ride requests',
-      );
-
-      // Show loading state
-      if (mounted) {
-        setState(() {
-          _isLoading = true;
-        });
-      }
-
-      final response = await Supabase.instance.client
-          .from('ride_requests')
-          .select(
-            'id, pickup_address, dropoff_address, proposed_price, created_at, status',
-          )
-          .eq('status', 'pending')
-          .order('created_at', ascending: false)
-          .limit(5);
-
-      debugPrint(
-        '📊 _fetchAvailableRideRequests: Raw response - ${response.length} items',
-      );
-
-      if (response.isNotEmpty) {
-        debugPrint(
-          '📊 _fetchAvailableRideRequests: First item - ${response.first}',
-        );
-      }
-
-      if (mounted) {
-        setState(() {
-          _availableRideRequests = List<Map<String, dynamic>>.from(response);
-          _isLoading = false;
-        });
-        debugPrint(
-          '✅ _fetchAvailableRideRequests: Found ${_availableRideRequests.length} available requests',
-        );
-
-        // Show feedback to user
-        if (_availableRideRequests.isNotEmpty) {
-          _showSuccessSnackbar(
-            'Found ${_availableRideRequests.length} ride requests',
-          );
-        } else {
-          _showErrorSnackbar('No ride requests found');
+      final userId = await SessionService.getUserId();
+      if (userId != null) {
+        final roles = await SessionService.getAvailableRoles(userId);
+        if (mounted) {
+          setState(() {
+            _canSwitchToCustomer = roles.contains('customer');
+          });
         }
       }
-    } catch (e, stackTrace) {
-      debugPrint('❌ _fetchAvailableRideRequests: Error - $e');
-      debugPrint('❌ _fetchAvailableRideRequests: Stack trace - $stackTrace');
+    } catch (e) {
+      debugPrint('Error checking roles: $e');
+    }
+  }
 
+  Future<void> _switchToCustomer() async {
+    final userId = await SessionService.getUserId();
+    if (userId == null) return;
+
+    // Check if online - must go offline first
+    if (_isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please go offline before switching roles'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Check for active trips
+    final hasActiveTrip = await SessionService.hasActiveTrip(userId);
+    if (hasActiveTrip) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showErrorSnackbar('Failed to fetch ride requests: ${e.toString()}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot switch roles while you have an active trip'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
+      return;
+    }
+
+    // Switch role
+    await SessionService.updateUserRole('customer');
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/customer_home',
+        (route) => false,
+      );
     }
   }
 
   Future<void> _signOut() async {
-    await AuthService.clearSession();
+    await AuthService.instance.clearSession();
+    await SessionService.clearSession();
   }
 
   Future<void> _toggleOnlineStatus() async {
     if (_isLoading) {
       debugPrint('⚠️ _toggleOnlineStatus: Already loading, ignoring request');
-      _showErrorSnackbar('Please wait, operation in progress');
       return;
     }
 
-    debugPrint(
-      '🔄 _toggleOnlineStatus: Starting toggle from $_isOnline to ${!_isOnline}',
-    );
+    debugPrint('🔄 _toggleOnlineStatus: Starting toggle from $_isOnline to ${!_isOnline}');
     setState(() => _isLoading = true);
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        debugPrint(
-          '✅ _toggleOnlineStatus: User authenticated, updating profile',
-        );
+        debugPrint('✅ _toggleOnlineStatus: User authenticated, updating profile');
         final response = await Supabase.instance.client
             .from('profiles')
             .update({'is_online': !_isOnline})
             .eq('id', user.id)
             .select();
 
-        if (response.isEmpty) {
-          throw Exception(
-            'Failed to update online status - no response from server',
-          );
-        }
+        if (response.isEmpty) throw Exception('Failed to update online status');
         debugPrint('✅ _toggleOnlineStatus: Profile updated successfully');
-
         // Update state first
         final newOnlineStatus = !_isOnline;
         setState(() => _isOnline = newOnlineStatus);
-
-        // Show immediate feedback to user
-        _showSuccessSnackbar(
-          newOnlineStatus
-              ? 'You are now online and ready to accept rides!'
-              : 'You are now offline. Take a break!',
-        );
-
+        
         // If going online, navigate to ride request screen IMMEDIATELY
-        debugPrint(
-          '🔍 _toggleOnlineStatus: Checking navigation condition - newOnlineStatus: $newOnlineStatus',
-        );
+        debugPrint('🔍 _toggleOnlineStatus: Checking navigation condition - newOnlineStatus: $newOnlineStatus');
         if (newOnlineStatus) {
-          debugPrint(
-            '🚗 _toggleOnlineStatus: Driver going online - navigating to ride request screen',
-          );
+          debugPrint('🚗 _toggleOnlineStatus: Driver going online - navigating to ride request screen');
           // Navigate immediately, don't wait for modal
           _navigateToRideRequestScreen();
         } else {
-          debugPrint(
-            '⚠️ _toggleOnlineStatus: Driver going offline - no navigation needed',
-          );
+          debugPrint('⚠️ _toggleOnlineStatus: Driver going offline - no navigation needed');
         }
-
-        // Show status change confirmation AFTER navigation (but don't wait for it)
+        
+        // Show status change confirmation AFTER navigation
         debugPrint('📱 _toggleOnlineStatus: Showing status change modal');
         _showStatusChangeModal();
       } else {
         debugPrint('❌ _toggleOnlineStatus: No authenticated user found');
-        _showErrorSnackbar('Not authenticated. Please log in again.');
       }
     } catch (e) {
       debugPrint('❌ _toggleOnlineStatus: Error - $e');
-
-      // Provide more helpful error message based on error type
-      final errorMessage = e.toString();
-      if (errorMessage.contains('permission denied for table profiles')) {
-        _showErrorSnackbar(
-          'Cannot update online status: Database permissions issue. '
-          'Please contact support or check RLS policies.',
-        );
-      } else {
-        _showErrorSnackbar('Failed to update online status: ${e.toString()}');
-      }
-
-      // Revert state on error
-      if (mounted) {
-        setState(() => _isOnline = _isOnline); // Keep current state
-      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -269,7 +269,11 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.schedule, size: 64, color: Colors.grey[400]),
+                      Icon(
+                        Icons.schedule,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
                       const SizedBox(height: 16),
                       const Text(
                         'Schedule Feature',
@@ -282,7 +286,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                       const SizedBox(height: 8),
                       Text(
                         'Coming soon - Schedule your availability and preferred working hours',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
@@ -405,6 +412,15 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                 child: Column(
                   children: [
                     _buildSettingOption(
+                      Icons.account_circle,
+                      'Account Settings',
+                      'Edit profile and manage account',
+                      () {
+                        Navigator.pop(context); // Close settings modal first
+                        Navigator.pushNamed(context, '/account-settings');
+                      },
+                    ),
+                    _buildSettingOption(
                       Icons.notifications,
                       'Notifications',
                       'Manage push notifications',
@@ -511,7 +527,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                     const SizedBox(height: 8),
                     Text(
                       'Coming soon - Configure your push notification preferences',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -558,7 +577,11 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.security, size: 64, color: Colors.grey[400]),
+                    Icon(
+                      Icons.security,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'Privacy & Safety Settings',
@@ -571,7 +594,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                     const SizedBox(height: 8),
                     Text(
                       'Coming soon - Manage your privacy settings and safety features',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -618,7 +644,11 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.info_outline, size: 64, color: Colors.grey[400]),
+                    Icon(
+                      Icons.info_outline,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'AlboCarRide Driver App',
@@ -631,7 +661,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                     const SizedBox(height: 8),
                     Text(
                       'Version 1.0.0\n\nProfessional ride-hailing platform for drivers',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
@@ -655,29 +688,21 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       final driverId = await _getDriverIdFromAuth();
       debugPrint('🔍 _navigateToRideRequestScreen: Got driver ID: $driverId');
       debugPrint('🔍 _navigateToRideRequestScreen: Mounted state: $mounted');
-
+      
       if (driverId != null && mounted) {
-        debugPrint(
-          '🚗 _navigateToRideRequestScreen: Navigating to ride request screen for driver $driverId',
-        );
+        debugPrint('🚗 _navigateToRideRequestScreen: Navigating to ride request screen for driver $driverId');
         final result = await Navigator.pushNamed(
           context,
           '/driver-ride-request',
           arguments: driverId,
         );
-        debugPrint(
-          '🔍 _navigateToRideRequestScreen: Navigation completed with result: $result',
-        );
+        debugPrint('🔍 _navigateToRideRequestScreen: Navigation completed with result: $result');
       } else {
-        debugPrint(
-          '❌ _navigateToRideRequestScreen: No driver ID found or not mounted',
-        );
+        debugPrint('❌ _navigateToRideRequestScreen: No driver ID found or not mounted');
       }
     } catch (e) {
       debugPrint('❌ _navigateToRideRequestScreen: Error - $e');
-      debugPrint(
-        '❌ _navigateToRideRequestScreen: Stack trace: ${e.toString()}',
-      );
+      debugPrint('❌ _navigateToRideRequestScreen: Stack trace: ${e.toString()}');
     }
   }
 
@@ -733,15 +758,16 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
                         _isOnline
                             ? 'Riders can now see you on the map and request rides.'
                             : 'You won\'t receive ride requests until you go online again.',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: () {
-                          debugPrint(
-                            '✅ StatusChangeModal: Got it button pressed - closing modal',
-                          );
+                          debugPrint('✅ StatusChangeModal: Got it button pressed - closing modal');
                           Navigator.pop(context);
                         },
                         child: const Text('Got it'),
@@ -769,7 +795,13 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(period, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(
+          period,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
       ],
     );
   }
@@ -787,7 +819,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         children: [
           Text(
             day,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -802,7 +837,10 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
               ),
               Text(
                 trips,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
               ),
             ],
           ),
@@ -829,11 +867,17 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       ),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey[600],
+        ),
       ),
       trailing: const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
@@ -842,27 +886,19 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint(
-      '🔄 EnhancedDriverHomePage: Building with isOnline=$_isOnline, isLoading=$_isLoading',
-    );
-
+    debugPrint('🔄 EnhancedDriverHomePage: Building with isOnline=$_isOnline, isLoading=$_isLoading');
+    
     // Add diagnostic logging for layout issues
-    debugPrint(
-      '🔍 EnhancedDriverHomePage: Starting build - checking layout constraints',
-    );
-
+    debugPrint('🔍 EnhancedDriverHomePage: Starting build - checking layout constraints');
+    
     return WillPopScope(
       onWillPop: () async {
-        debugPrint(
-          '🔙 EnhancedDriverHomePage: Back button pressed - showing exit confirmation',
-        );
+        debugPrint('🔙 EnhancedDriverHomePage: Back button pressed - showing exit confirmation');
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Exit App?'),
-            content: const Text(
-              'Do you want to exit the AlboCarRide driver app?',
-            ),
+            content: const Text('Do you want to exit the AlboCarRide driver app?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -878,628 +914,430 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         return shouldExit ?? false;
       },
       child: Scaffold(
-        backgroundColor: Colors.grey[50],
-        appBar: AppBar(
-          title: Text(
-            _isOnline ? 'Online - Ready to Drive' : 'Driver Dashboard',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: _isOnline ? Colors.white : Colors.black87,
-            ),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: Text(
+          _isOnline ? 'Online - Ready to Drive' : 'Driver Dashboard',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: _isOnline ? Colors.white : Colors.black87,
           ),
-          backgroundColor: _isOnline ? Colors.green : Colors.white,
-          elevation: 1,
-          foregroundColor: _isOnline ? Colors.white : Colors.black87,
-          actions: [
-            if (_isOnline)
+        ),
+        backgroundColor: _isOnline ? Colors.green : Colors.white,
+        elevation: 1,
+        foregroundColor: _isOnline ? Colors.white : Colors.black87,
+        actions: [
+          if (_isOnline)
+            Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(51),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Online',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_canSwitchToCustomer)
+            IconButton(
+              icon: const Icon(Icons.person),
+              tooltip: 'Switch to Customer Mode',
+              onPressed: _switchToCustomer,
+            ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              final navigatorContext = context;
+              _signOut().then((_) {
+                if (navigatorContext.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                    navigatorContext,
+                    '/role-selection',
+                    (route) => false,
+                  );
+                }
+              });
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0), // Reduced padding for better space management
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Profile Picture Warning Banner
+            if (!_hasProfilePicture)
               Container(
-                margin: const EdgeInsets.all(8),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(51),
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.orange.withAlpha(26),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Online',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () {
-                final navigatorContext = context;
-                _signOut().then((_) {
-                  if (navigatorContext.mounted) {
-                    Navigator.pushNamedAndRemoveUntil(
-                      navigatorContext,
-                      '/role-selection',
-                      (route) => false,
-                    );
-                  }
-                });
-              },
-            ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(
-            16.0,
-          ), // Reduced padding for better space management
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Diagnostic logging for layout
-              Builder(
-                builder: (context) {
-                  debugPrint(
-                    '🔍 EnhancedDriverHomePage: Column children building - checking constraints',
-                  );
-                  return const SizedBox.shrink();
-                },
-              ),
-              // 1️⃣ Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: _isOnline ? Colors.green : Colors.blue,
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _isOnline
-                        ? [Colors.green, Colors.lightGreen]
-                        : [Colors.blue, Colors.lightBlue],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Welcome back!',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _isOnline
-                          ? 'You\'re online and ready to accept rides!'
-                          : 'Ready to start earning?',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withAlpha(229),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // 2️⃣ Embedded Realtime Dashboard
-              FutureBuilder<String?>(
-                future: _getDriverIdFromAuth(),
-                builder: (context, snapshot) {
-                  final driverId = snapshot.data;
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-                  if (driverId == null) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: const ListTile(
-                        title: Text('Driver Stats Unavailable'),
-                        subtitle: Text(
-                          'No driver ID found. Please log in again.',
-                        ),
-                      ),
-                    );
-                  }
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(13),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
+                    const Icon(Icons.warning, color: Colors.orange),
+                    const SizedBox(width: 12),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.dashboard_outlined,
-                                color: Colors.black87,
-                              ),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Text(
-                                  'Driver Dashboard',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                _isOnline
-                                    ? Icons.circle
-                                    : Icons.circle_outlined,
-                                color: _isOnline ? Colors.green : Colors.grey,
-                                size: 12,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isOnline ? 'Online' : 'Offline',
-                                style: TextStyle(
-                                  color: _isOnline ? Colors.green : Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Divider(height: 1),
-                          const SizedBox(height: 12),
-                          // 🚀 Embed Realtime Dashboard
-                          DriverDashboardV2Realtime(driverId: driverId),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // 3️⃣ Earnings Summary with Pending Requests
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(13),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildStatItem('R245.50', 'Today', Icons.attach_money),
-                    _buildStatItem('8', 'Rides', Icons.directions_car),
-                    _buildStatItem('4.8', 'Rating', Icons.star),
-                    _buildStatItem(
-                      '$_pendingOffersCount',
-                      'Requests',
-                      Icons.notifications,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // 4️⃣ Available Ride Requests Section
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(13),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Available Ride Requests',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        if (_pendingOffersCount > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '$_pendingOffersCount new',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.red,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Real-time ride requests from customers in your area',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Show available ride requests (from ride_requests table)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: _availableRideRequests.isNotEmpty
-                            ? Colors.blue[50]!
-                            : Colors.grey[50]!,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: _availableRideRequests.isNotEmpty
-                              ? Colors.blue[100]!
-                              : Colors.grey[200]!,
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _availableRideRequests.isNotEmpty
-                                      ? '${_availableRideRequests.length} ride requests available in your area'
-                                      : 'No ride requests available at the moment',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: _availableRideRequests.isNotEmpty
-                                        ? Colors.blue[800]!
-                                        : Colors.grey[600]!,
-                                  ),
-                                ),
-                                if (_availableRideRequests.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      'Tap refresh to check for new requests',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[600]!,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.refresh,
-                              size: 16,
-                              color: _availableRideRequests.isNotEmpty
-                                  ? Colors.blue
-                                  : Colors.grey,
-                            ),
-                            onPressed: _fetchAvailableRideRequests,
-                            tooltip: 'Refresh requests',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_availableRideRequests.isNotEmpty && !_isOnline)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.red[50]!,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.red[100]!, width: 1),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.info, size: 14, color: Colors.red),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Go online to accept these requests',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.red[700]!,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (_availableRideRequests.isEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(top: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange[50]!,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: Colors.orange[100]!,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.info,
-                              size: 14,
+                          const Text(
+                            'Profile picture required',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
                               color: Colors.orange,
                             ),
+                          ),
+                          Text(
+                            'Add a photo so riders can identify you',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/profile-picture'),
+                      child: const Text('Add'),
+                    ),
+                  ],
+                ),
+              ),
+            // 1️⃣ Header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: _isOnline ? Colors.green : Colors.blue,
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: _isOnline
+                      ? [Colors.green, Colors.lightGreen]
+                      : [Colors.blue, Colors.lightBlue],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Welcome back!',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isOnline
+                        ? 'You\'re online and ready to accept rides!'
+                        : 'Ready to start earning?',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white.withAlpha(229),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // 2️⃣ Embedded Realtime Dashboard
+            FutureBuilder<String?>(
+              future: _getDriverIdFromAuth(),
+              builder: (context, snapshot) {
+                final driverId = snapshot.data;
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (driverId == null) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: const ListTile(
+                      title: Text('Driver Stats Unavailable'),
+                      subtitle: Text('No driver ID found. Please log in again.'),
+                    ),
+                  );
+                }
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(13),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.dashboard_outlined,
+                                color: Colors.black87),
                             const SizedBox(width: 8),
-                            Expanded(
+                            const Expanded(
                               child: Text(
-                                'No ride requests found. Check back later or try refreshing.',
+                                'Driver Dashboard',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.orange[700]!,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              _isOnline
+                                  ? Icons.circle
+                                  : Icons.circle_outlined,
+                              color: _isOnline ? Colors.green : Colors.grey,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _isOnline ? 'Online' : 'Offline',
+                              style: TextStyle(
+                                color:
+                                    _isOnline ? Colors.green : Colors.grey,
+                                fontSize: 12,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    const SizedBox(height: 16),
-
-                    // Show ride offers (from ride_offers table)
-                    Container(
-                      height: 300,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: const OfferBoard(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // 5️⃣ Quick Actions - Single section with all buttons visible
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(13),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Quick Actions',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Manage your driver status and access key features',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    GridView(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1.6,
+                        const SizedBox(height: 12),
+                        const Divider(height: 1),
+                        const SizedBox(height: 12),
+                        // Status indicator
+                        Text(
+                          _isOnline ? 'You are online and receiving ride requests' : 'Go online to start receiving ride requests',
+                          style: TextStyle(
+                            color: _isOnline ? Colors.green.shade700 : Colors.grey.shade600,
+                            fontSize: 13,
                           ),
-                      children: [
-                        _buildActionCard(
-                          icon: _isOnline
-                              ? Icons.offline_bolt
-                              : Icons.directions_car,
-                          title: _isOnline ? 'Go Offline' : 'Go Online',
-                          color: _isOnline ? Colors.red : Colors.green,
-                          onTap: _isLoading ? null : _toggleOnlineStatus,
-                        ),
-                        _buildActionCard(
-                          icon: Icons.schedule,
-                          title: 'Schedule',
-                          color: Colors.orange,
-                          onTap: () => _showScheduleModal(context),
-                        ),
-                        _buildActionCard(
-                          icon: Icons.analytics,
-                          title: 'Earnings',
-                          color: Colors.purple,
-                          onTap: () => _showEarningsModal(context),
-                        ),
-                        _buildActionCard(
-                          icon: Icons.settings,
-                          title: 'Settings',
-                          color: Colors.blueGrey,
-                          onTap: () => _showSettingsModal(context),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                  ),
+                );
+              },
+            ),
 
-              // 6️⃣ Recent Activity
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(13),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Recent Activity',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Your recent trips and earnings',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    Column(
-                      children: [
-                        _buildRideItem(
-                          'John D.',
-                          'Downtown • R18.75 • Completed',
-                          Icons.check_circle,
-                          Colors.green,
-                        ),
-                        _buildRideItem(
-                          'Sarah M.',
-                          'Airport • R32.50 • In Progress',
-                          Icons.pending,
-                          Colors.orange,
-                        ),
-                        _buildRideItem(
-                          'Mike T.',
-                          'Mall • R24.90 • Completed',
-                          Icons.check_circle,
-                          Colors.green,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/rides-history');
-                        },
-                        child: const Text('View All Rides'),
-                      ),
-                    ),
-                  ],
-                ),
+            // 3️⃣ Earnings Summary - Simplified layout
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(13),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween, // Better spacing
+                children: [
+                  _buildStatItem('R245.50', 'Today', Icons.attach_money),
+                  _buildStatItem('8', 'Rides', Icons.directions_car),
+                  _buildStatItem('4.8', 'Rating', Icons.star),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // 4️⃣ Quick Actions (existing)
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 4️⃣ Quick Actions - Simplified with better spacing
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 18, // Slightly smaller
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 180, // Reduced height for better space management
+              child: GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12, // Reduced spacing
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.4, // Wider aspect ratio
+                ),
+                children: [
+                  _buildActionCard(
+                    icon: _isOnline ? Icons.offline_bolt : Icons.directions_car,
+                    title: _isOnline ? 'Go Offline' : 'Go Online',
+                    color: _isOnline ? Colors.red : Colors.blue,
+                    onTap: _isLoading ? null : _toggleOnlineStatus,
+                  ),
+                  _buildActionCard(
+                    icon: Icons.schedule,
+                    title: 'Schedule',
+                    color: Colors.orange,
+                    onTap: () => _showScheduleModal(context),
+                  ),
+                  _buildActionCard(
+                    icon: Icons.analytics,
+                    title: 'Earnings',
+                    color: Colors.purple,
+                    onTap: () => _showEarningsModal(context),
+                  ),
+                  _buildActionCard(
+                    icon: Icons.settings,
+                    title: 'Settings',
+                    color: Colors.grey,
+                    onTap: () => _showSettingsModal(context),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // 5️⃣ Recent Rides (existing) - Limited to 2 items for better visibility
+            const Text(
+              'Recent Rides',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Wrap recent rides in a constrained container with limited items
+            Column(
+              children: [
+                _buildRideItem('John D.', 'Downtown • R18.75',
+                    Icons.check_circle, Colors.green),
+                _buildRideItem('Sarah M.', 'Airport • R32.50',
+                    Icons.pending, Colors.orange),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // 6️⃣ Additional Actions Section
+            const Text(
+              'More Actions',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 120, // Fixed height for consistent layout
+              child: GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: 2.5, // Wider buttons for better visibility
+                ),
+                children: [
+                  _buildSecondaryActionCard(
+                    icon: Icons.analytics,
+                    title: 'Full Earnings',
+                    color: Colors.purple,
+                    onTap: () => _showEarningsModal(context),
+                  ),
+                  _buildSecondaryActionCard(
+                    icon: Icons.settings,
+                    title: 'Settings',
+                    color: Colors.grey,
+                    onTap: () => _showSettingsModal(context),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+      ),
       ),
     );
   }
 
   Widget _buildStatItem(String value, String label, IconData icon) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min, // Use min to fit content
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: Colors.green), // Even smaller icon
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 12, // Smaller font
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+    return Expanded( // Use Expanded to prevent overflow
+      child: Column(
+        children: [
+          Icon(icon, size: 20, color: Colors.green), // Smaller icon
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14, // Smaller font
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9, // Smaller font
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: Colors.grey[600]), // Smaller font
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
@@ -1516,9 +1354,7 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       elevation: 2,
       child: InkWell(
         onTap: () {
-          debugPrint(
-            '🎯 ActionCard: "$title" tapped - onTap: ${onTap != null}',
-          );
+          debugPrint('🎯 ActionCard: "$title" tapped - onTap: ${onTap != null}');
           if (onTap != null) {
             onTap();
           } else {
@@ -1527,31 +1363,28 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(12), // Reduced padding
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min, // Use min to fit content
             children: [
               Container(
-                width: 40, // Reduced from 48
-                height: 40, // Reduced from 48
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: color.withAlpha(26),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 20, color: color), // Reduced from 24
+                child: Icon(icon, size: 24, color: color),
               ),
-              const SizedBox(height: 8), // Reduced from 12
+              const SizedBox(height: 12),
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 12, // Reduced from 14
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: Colors.black87,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 2, // Allow text to wrap
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -1596,19 +1429,15 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  passenger,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                ),
+                Text(passenger,
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87)),
                 const SizedBox(height: 4),
-                Text(
-                  details,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
+                Text(details,
+                    style:
+                        TextStyle(fontSize: 14, color: Colors.grey[600])),
               ],
             ),
           ),
@@ -1629,15 +1458,11 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
       elevation: 2,
       child: InkWell(
         onTap: () {
-          debugPrint(
-            '🎯 SecondaryActionCard: "$title" tapped - onTap: ${onTap != null}',
-          );
+          debugPrint('🎯 SecondaryActionCard: "$title" tapped - onTap: ${onTap != null}');
           if (onTap != null) {
             onTap();
           } else {
-            debugPrint(
-              '⚠️ SecondaryActionCard: "$title" has null onTap handler',
-            );
+            debugPrint('⚠️ SecondaryActionCard: "$title" has null onTap handler');
           }
         },
         borderRadius: BorderRadius.circular(12),
@@ -1670,28 +1495,6 @@ class _EnhancedDriverHomePageState extends State<EnhancedDriverHomePage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _showErrorSnackbar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
       ),
     );
   }

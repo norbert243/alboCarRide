@@ -1,12 +1,11 @@
-
-// lib/screens/driver/verification_page.dart - COMPLETELY REDESIGNED
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/document_service.dart';
-import '../../services/auth_service.dart';
-import '../../services/telemetry_service.dart';
+import 'package:albocarride/services/auth_service.dart';
+import 'package:albocarride/services/document_service.dart';
+import 'package:albocarride/services/telemetry_service.dart';
 
 class VerificationPage extends StatefulWidget {
   const VerificationPage({super.key});
@@ -177,7 +176,7 @@ class _VerificationPageState extends State<VerificationPage> {
   }
 
   Future<void> _uploadDocument() async {
-    final userId = await AuthService.getUserId();
+    final userId = AuthService.instance.currentUserId;
     if (userId == null || _selectedFile == null) return;
 
     setState(() {
@@ -219,7 +218,7 @@ class _VerificationPageState extends State<VerificationPage> {
   }
 
   Future<void> _submitForVerification() async {
-    final userId = await AuthService.getUserId();
+    final userId = AuthService.instance.currentUserId;
     if (userId == null || !_uploadComplete) return;
 
     setState(() => _uploading = true);
@@ -273,7 +272,7 @@ class _VerificationPageState extends State<VerificationPage> {
       ),
     );
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
